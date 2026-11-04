@@ -2,8 +2,8 @@
 
 namespace Database\Factories;
 
-use App\Enums\Rol;
 use App\Models\Gerencia;
+use App\Models\Rol;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Facades\Hash;
@@ -33,7 +33,7 @@ class UserFactory extends Factory
             'email_verified_at' => now(),
             'password' => static::$password ??= Hash::make('password'),
             'remember_token' => Str::random(10),
-            'rol' => Rol::Consulta,
+            'rol_id' => fn () => Rol::porSlug(Rol::CONSULTA)->id,
             'activo' => true,
             'intentos_fallidos' => 0,
             'bloqueado_en' => null,
@@ -43,12 +43,17 @@ class UserFactory extends Factory
 
     public function administrador(): static
     {
-        return $this->state(fn (array $attributes) => ['rol' => Rol::Administrador]);
+        return $this->state(fn (array $attributes) => ['rol_id' => Rol::porSlug(Rol::ADMINISTRADOR)->id]);
     }
 
     public function recepcion(): static
     {
-        return $this->state(fn (array $attributes) => ['rol' => Rol::Recepcion]);
+        return $this->state(fn (array $attributes) => ['rol_id' => Rol::porSlug(Rol::RECEPCION)->id]);
+    }
+
+    public function conRol(Rol $rol): static
+    {
+        return $this->state(fn (array $attributes) => ['rol_id' => $rol->id]);
     }
 
     public function inactivo(): static

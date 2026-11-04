@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Enums\Permiso;
 use App\Http\Middleware\EnsureCuentaActiva;
 use App\Models\Bitacora;
 use App\Models\User;
@@ -34,13 +35,13 @@ class AppServiceProvider extends ServiceProvider
     }
 
     /**
-     * Permisos de los roles Recepción, Consulta y Administrador.
+     * Cada permiso del catálogo es una habilidad que se evalúa con el rol del usuario.
      */
     protected function registrarPermisos(): void
     {
-        Gate::define('administrar', fn (User $user): bool => $user->esAdministrador());
-        Gate::define('registrar-memos', fn (User $user): bool => $user->puedeRegistrarMemos());
-        Gate::define('consultar-memos', fn (User $user): bool => $user->puedeIngresar());
+        foreach (Permiso::cases() as $permiso) {
+            Gate::define($permiso->value, fn (User $user): bool => $user->tienePermiso($permiso));
+        }
     }
 
     /**

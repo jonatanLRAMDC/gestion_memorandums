@@ -1,10 +1,10 @@
 <?php
 
-use App\Enums\Rol;
 use App\Models\Gerencia;
 use App\Models\User;
 use Database\Seeders\DatabaseSeeder;
 use Database\Seeders\GerenciaSeeder;
+use Database\Seeders\TitularesPruebaSeeder;
 
 test('the gerencia catalog has 33 entries with unique siglas and GIS as the own gerencia', function () {
     $this->seed(GerenciaSeeder::class);
@@ -23,7 +23,18 @@ test('the database seeder creates the initial administrator in GIS', function ()
 
     $admin = User::firstWhere('email', 'admin@amdc.hn');
 
-    expect($admin->rol)->toBe(Rol::Administrador)
+    expect($admin->esAdministrador())->toBeTrue()
         ->and($admin->gerencia->siglas)->toBe('GIS')
         ->and($admin->debe_cambiar_contrasena)->toBeTrue();
+});
+
+test('test titulares fill every gerencia without overwriting existing ones', function () {
+    $this->seed(GerenciaSeeder::class);
+    Gerencia::where('siglas', 'GRH')->update(['titular_nombre' => 'Titular real']);
+
+    $this->seed(TitularesPruebaSeeder::class);
+
+    expect(Gerencia::whereNull('titular_nombre')->count())->toBe(0)
+        ->and(Gerencia::firstWhere('siglas', 'GRH')->titular_nombre)->toBe('Titular real')
+        ->and(Gerencia::firstWhere('siglas', 'GIS')->titular_nombre)->toBe('Ing. Roberto Euceda');
 });

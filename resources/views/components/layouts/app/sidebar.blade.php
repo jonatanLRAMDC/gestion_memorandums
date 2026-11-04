@@ -14,15 +14,27 @@
             <flux:navlist variant="outline">
                 <flux:navlist.group heading="Principal" class="grid">
                     <flux:navlist.item icon="home" :href="route('dashboard')" :current="request()->routeIs('dashboard')" wire:navigate>Panel</flux:navlist.item>
+                    @can('memorandos.consultar')
+                        <flux:navlist.item icon="document-text" :href="route('memorandos.index')" :current="request()->routeIs('memorandos.*')" wire:navigate>Memorandos</flux:navlist.item>
+                    @endcan
                 </flux:navlist.group>
 
-                @can('administrar')
+                @canany(['gerencias.consultar', 'usuarios.consultar', 'roles.consultar', 'bitacora.consultar'])
                     <flux:navlist.group heading="Administración" class="grid">
-                        <flux:navlist.item icon="building-office-2" :href="route('admin.gerencias')" :current="request()->routeIs('admin.gerencias')" wire:navigate>Gerencias</flux:navlist.item>
-                        <flux:navlist.item icon="users" :href="route('admin.usuarios')" :current="request()->routeIs('admin.usuarios')" wire:navigate>Usuarios</flux:navlist.item>
-                        <flux:navlist.item icon="clipboard-document-list" :href="route('admin.bitacora')" :current="request()->routeIs('admin.bitacora')" wire:navigate>Bitácora</flux:navlist.item>
+                        @can('gerencias.consultar')
+                            <flux:navlist.item icon="building-office-2" :href="route('admin.gerencias')" :current="request()->routeIs('admin.gerencias')" wire:navigate>Gerencias</flux:navlist.item>
+                        @endcan
+                        @can('usuarios.consultar')
+                            <flux:navlist.item icon="users" :href="route('admin.usuarios')" :current="request()->routeIs('admin.usuarios')" wire:navigate>Usuarios</flux:navlist.item>
+                        @endcan
+                        @can('roles.consultar')
+                            <flux:navlist.item icon="shield-check" :href="route('admin.roles')" :current="request()->routeIs('admin.roles')" wire:navigate>Roles y permisos</flux:navlist.item>
+                        @endcan
+                        @can('bitacora.consultar')
+                            <flux:navlist.item icon="clipboard-document-list" :href="route('admin.bitacora')" :current="request()->routeIs('admin.bitacora')" wire:navigate>Bitácora</flux:navlist.item>
+                        @endcan
                     </flux:navlist.group>
-                @endcan
+                @endcanany
             </flux:navlist>
 
             <flux:spacer />

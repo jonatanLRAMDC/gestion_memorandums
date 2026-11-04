@@ -15,5 +15,9 @@ class DatabaseSeeder extends Seeder
             GerenciaSeeder::class,
             AdministradorSeeder::class,
         ]);
+
+        if (app()->environment(['local', 'testing'])) {
+            $this->call(TitularesPruebaSeeder::class);
+        }
     }
 }

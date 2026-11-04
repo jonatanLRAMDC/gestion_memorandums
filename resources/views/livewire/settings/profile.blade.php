@@ -47,7 +47,7 @@ new class extends Component {
 
             <div class="grid gap-6 sm:grid-cols-2">
                 <flux:input label="Gerencia" :value="auth()->user()->gerencia?->nombre ?? 'Sin gerencia'" readonly disabled />
-                <flux:input label="Rol" :value="auth()->user()->rol->etiqueta()" readonly disabled />
+                <flux:input label="Rol" :value="auth()->user()->rol?->nombre ?? 'Sin rol'" readonly disabled />
             </div>
 
             <div class="flex items-center gap-4">

@@ -17,7 +17,7 @@ new #[Title('Bitácora')] class extends Component {
 
     public function boot(): void
     {
-        Gate::authorize('administrar');
+        Gate::authorize('bitacora.consultar');
     }
 
     public function updated(): void

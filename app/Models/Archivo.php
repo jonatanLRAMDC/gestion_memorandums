@@ -42,6 +42,16 @@ class Archivo extends Model
     }
 
     /**
+     * Tamaño legible: KB por debajo de 1 MB, MB desde ahí.
+     */
+    public static function tamanoLegible(int $bytes): string
+    {
+        return $bytes < 1024 * 1024
+            ? number_format(max(1, $bytes / 1024), 0).' KB'
+            : number_format($bytes / 1024 / 1024, 2).' MB';
+    }
+
+    /**
      * @return BelongsTo<Memorando, $this>
      */
     public function memorando(): BelongsTo

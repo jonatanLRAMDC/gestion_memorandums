@@ -1,5 +1,6 @@
 <?php
 
+use App\Livewire\Concerns\ConfirmaAcciones;
 use App\Models\Bitacora;
 use App\Models\Gerencia;
 use Flux\Flux;
@@ -12,6 +13,7 @@ use Livewire\Volt\Component;
 use Livewire\WithPagination;
 
 new #[Title('Gerencias')] class extends Component {
+    use ConfirmaAcciones;
     use WithPagination;
 
     public string $buscar = '';
@@ -30,7 +32,7 @@ new #[Title('Gerencias')] class extends Component {
 
     public function boot(): void
     {
-        Gate::authorize('administrar');
+        Gate::authorize('gerencias.consultar');
     }
 
     public function updatedBuscar(): void
@@ -57,6 +59,8 @@ new #[Title('Gerencias')] class extends Component {
 
     public function crear(): void
     {
+        Gate::authorize('gerencias.crear');
+
         $this->resetErrorBag();
         $this->reset('editandoId', 'nombre', 'siglas', 'titular_nombre', 'titular_cargo', 'usa_sistema');
 
@@ -65,6 +69,8 @@ new #[Title('Gerencias')] class extends Component {
 
     public function editar(Gerencia $gerencia): void
     {
+        Gate::authorize('gerencias.editar');
+
         $this->resetErrorBag();
         $this->editandoId = $gerencia->id;
         $this->nombre = $gerencia->nombre;
@@ -78,6 +84,8 @@ new #[Title('Gerencias')] class extends Component {
 
     public function guardar(): void
     {
+        Gate::authorize($this->editandoId ? 'gerencias.editar' : 'gerencias.crear');
+
         $this->siglas = mb_strtoupper(trim($this->siglas));
 
         $datos = $this->validate([
@@ -109,8 +117,32 @@ new #[Title('Gerencias')] class extends Component {
         Flux::modal('gerencia')->close();
     }
 
+    public function solicitarCambioEstado(Gerencia $gerencia): void
+    {
+        $this->pedirConfirmacion(
+            'cambiarEstado',
+            $gerencia->id,
+            $gerencia->activa ? 'Desactivar gerencia' : 'Activar gerencia',
+            $gerencia->activa
+                ? "¿Desea desactivar {$gerencia->nombre}? Ya no estará disponible para nuevos memorandos, pero permanecerá en el sistema y en los registros históricos."
+                : "¿Desea activar {$gerencia->nombre}? Volverá a estar disponible en los formularios.",
+            $gerencia->activa ? 'Desactivar' : 'Activar',
+            peligro: $gerencia->activa,
+        );
+    }
+
+    /**
+     * @return list<string>
+     */
+    protected function accionesConfirmables(): array
+    {
+        return ['cambiarEstado'];
+    }
+
     public function cambiarEstado(Gerencia $gerencia): void
     {
+        Gate::authorize('gerencias.activar');
+
         if ($gerencia->activa && $gerencia->siglas === config('memorandos.siglas_gerencia_propia')) {
             Flux::toast(variant: 'danger', text: 'La gerencia propia del sistema no se puede desactivar.');
 
@@ -131,7 +163,9 @@ new #[Title('Gerencias')] class extends Component {
             <flux:subheading>Catálogo de gerencias que envían y reciben memorandos.</flux:subheading>
         </div>
 
-        <flux:button variant="primary" icon="plus" wire:click="crear">Nueva gerencia</flux:button>
+        @can('gerencias.crear')
+            <flux:button variant="primary" icon="plus" wire:click="crear">Nueva gerencia</flux:button>
+        @endcan
     </div>
 
     <flux:input wire:model.live.debounce.300ms="buscar" icon="magnifying-glass" placeholder="Buscar por nombre, siglas o titular…" class="max-w-md" clearable />
@@ -170,16 +204,20 @@ new #[Title('Gerencias')] class extends Component {
                             </flux:badge>
                         </flux:table.cell>
                         <flux:table.cell align="end">
-                            <flux:button size="sm" variant="ghost" icon="pencil-square" wire:click="editar({{ $gerencia->id }})">Editar</flux:button>
-                            <flux:button
-                                size="sm"
-                                variant="ghost"
-                                :icon="$gerencia->activa ? 'no-symbol' : 'check-circle'"
-                                wire:click="cambiarEstado({{ $gerencia->id }})"
-                                wire:confirm="{{ $gerencia->activa ? '¿Desactivar esta gerencia? No aparecerá en los formularios, pero sus memorandos se conservan.' : '¿Activar esta gerencia?' }}"
-                            >
-                                {{ $gerencia->activa ? 'Desactivar' : 'Activar' }}
-                            </flux:button>
+                            @can('gerencias.editar')
+                                <flux:button size="sm" variant="ghost" icon="pencil-square" wire:click="editar({{ $gerencia->id }})">Editar</flux:button>
+                            @endcan
+                            @can('gerencias.activar')
+                                <flux:button
+                                    size="sm"
+                                    variant="ghost"
+                                    :icon="$gerencia->activa ? 'no-symbol' : 'check-circle'"
+                                    :class="$gerencia->activa ? '!text-red-600 dark:!text-red-400' : ''"
+                                    wire:click="solicitarCambioEstado({{ $gerencia->id }})"
+                                >
+                                    {{ $gerencia->activa ? 'Desactivar' : 'Activar' }}
+                                </flux:button>
+                            @endcan
                         </flux:table.cell>
                     </flux:table.row>
                 @empty
@@ -190,6 +228,8 @@ new #[Title('Gerencias')] class extends Component {
             </flux:table.rows>
         </flux:table>
     </div>
+
+    <x-modal-confirmacion :confirmacion="$confirmacion" />
 
     <flux:modal name="gerencia" class="w-full max-w-lg">
         <form wire:submit="guardar" class="space-y-5">

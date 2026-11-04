@@ -1,8 +1,8 @@
 <?php
 
-use App\Enums\Rol;
 use App\Models\Bitacora;
 use App\Models\Gerencia;
+use App\Models\Rol;
 use App\Models\User;
 use Illuminate\Support\Facades\Hash;
 use Livewire\Volt\Volt;
@@ -19,14 +19,14 @@ test('an administrator creates a user with a temporary password', function () {
         ->assertSet('gerencia_id', $this->gis->id)
         ->set('name', 'María López')
         ->set('email', 'Maria.Lopez@AMDC.hn')
-        ->set('rol', Rol::Recepcion->value)
+        ->set('rol_id', Rol::porSlug(Rol::RECEPCION)->id)
         ->call('guardar')
         ->assertHasNoErrors();
 
     $usuario = User::firstWhere('email', 'maria.lopez@amdc.hn');
     $contrasena = $componente->get('contrasenaTemporal');
 
-    expect($usuario->rol)->toBe(Rol::Recepcion)
+    expect($usuario->rol->slug)->toBe(Rol::RECEPCION)
         ->and($usuario->debe_cambiar_contrasena)->toBeTrue()
         ->and(Hash::check($contrasena, $usuario->password))->toBeTrue()
         ->and(Bitacora::where('accion', 'usuario_creado')->where('entidad_id', $usuario->id)->exists())->toBeTrue();
@@ -73,11 +73,11 @@ test('administrators can not deactivate their own account or drop their role', f
 
     Volt::test('admin.usuarios')
         ->call('editar', $this->admin->id)
-        ->set('rol', Rol::Consulta->value)
+        ->set('rol_id', Rol::porSlug(Rol::CONSULTA)->id)
         ->call('guardar')
-        ->assertHasErrors('rol');
+        ->assertHasErrors('rol_id');
 
-    expect($this->admin->refresh()->rol)->toBe(Rol::Administrador);
+    expect($this->admin->refresh()->esAdministrador())->toBeTrue();
 });
 
 test('an administrator can deactivate another user', function () {
@@ -86,4 +86,31 @@ test('an administrator can deactivate another user', function () {
     Volt::test('admin.usuarios')->call('cambiarEstado', $usuario->id);
 
     expect($usuario->refresh()->activo)->toBeFalse();
+});
+
+test('deactivating a user asks for confirmation in a modal first', function () {
+    $usuario = User::factory()->create();
+
+    Volt::test('admin.usuarios')
+        ->call('solicitarCambioEstado', $usuario->id)
+        ->assertSet('confirmacion.accion', 'cambiarEstado')
+        ->assertSet('confirmacion.boton', 'Desactivar');
+
+    expect($usuario->refresh()->activo)->toBeTrue();
+
+    Volt::test('admin.usuarios')
+        ->call('solicitarCambioEstado', $usuario->id)
+        ->call('confirmarAccion');
+
+    expect($usuario->refresh()->activo)->toBeFalse();
+});
+
+test('only whitelisted actions can run from the confirmation modal', function () {
+    $usuario = User::factory()->create();
+
+    Volt::test('admin.usuarios')
+        ->set('confirmacion.accion', 'guardar')
+        ->set('confirmacion.id', $usuario->id)
+        ->call('confirmarAccion')
+        ->assertForbidden();
 });

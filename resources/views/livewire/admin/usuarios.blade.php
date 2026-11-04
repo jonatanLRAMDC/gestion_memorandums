@@ -1,8 +1,9 @@
 <?php
 
-use App\Enums\Rol;
+use App\Livewire\Concerns\ConfirmaAcciones;
 use App\Models\Bitacora;
 use App\Models\Gerencia;
+use App\Models\Rol;
 use App\Models\User;
 use Flux\Flux;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
@@ -16,6 +17,7 @@ use Livewire\Volt\Component;
 use Livewire\WithPagination;
 
 new #[Title('Usuarios')] class extends Component {
+    use ConfirmaAcciones;
     use WithPagination;
 
     public string $buscar = '';
@@ -28,7 +30,7 @@ new #[Title('Usuarios')] class extends Component {
 
     public ?int $gerencia_id = null;
 
-    public string $rol = 'consulta';
+    public ?int $rol_id = null;
 
     /**
      * Contraseña temporal recién generada; se muestra una sola vez.
@@ -39,7 +41,7 @@ new #[Title('Usuarios')] class extends Component {
 
     public function boot(): void
     {
-        Gate::authorize('administrar');
+        Gate::authorize('usuarios.consultar');
     }
 
     public function updatedBuscar(): void
@@ -54,7 +56,7 @@ new #[Title('Usuarios')] class extends Component {
     public function usuarios(): LengthAwarePaginator
     {
         return User::query()
-            ->with('gerencia')
+            ->with(['gerencia', 'rol'])
             ->when($this->buscar !== '', function ($query): void {
                 $query->where(fn ($q) => $q
                     ->where('name', 'like', "%{$this->buscar}%")
@@ -73,11 +75,22 @@ new #[Title('Usuarios')] class extends Component {
         return Gerencia::activas()->orderBy('nombre')->get(['id', 'nombre', 'siglas']);
     }
 
+    /**
+     * @return Collection<int, Rol>
+     */
+    #[Computed]
+    public function roles(): Collection
+    {
+        return Rol::activos()->orderBy('nombre')->get(['id', 'nombre']);
+    }
+
     public function crear(): void
     {
+        Gate::authorize('usuarios.crear');
+
         $this->resetErrorBag();
         $this->reset('editandoId', 'name', 'email');
-        $this->rol = Rol::Consulta->value;
+        $this->rol_id = Rol::porSlug(Rol::CONSULTA)?->id;
         $this->gerencia_id = Gerencia::propia()?->id;
 
         Flux::modal('usuario')->show();
@@ -85,29 +98,33 @@ new #[Title('Usuarios')] class extends Component {
 
     public function editar(User $usuario): void
     {
+        Gate::authorize('usuarios.editar');
+
         $this->resetErrorBag();
         $this->editandoId = $usuario->id;
         $this->name = $usuario->name;
         $this->email = $usuario->email;
         $this->gerencia_id = $usuario->gerencia_id;
-        $this->rol = $usuario->rol->value;
+        $this->rol_id = $usuario->rol_id;
 
         Flux::modal('usuario')->show();
     }
 
     public function guardar(): void
     {
+        Gate::authorize($this->editandoId ? 'usuarios.editar' : 'usuarios.crear');
+
         $this->email = Str::lower(trim($this->email));
 
         $datos = $this->validate([
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'string', 'email', 'max:255', Rule::unique('users', 'email')->ignore($this->editandoId)],
             'gerencia_id' => ['required', Rule::exists('gerencias', 'id')->where('activa', true)],
-            'rol' => ['required', Rule::enum(Rol::class)],
-        ]);
+            'rol_id' => ['required', Rule::exists('roles', 'id')->where('activo', true)],
+        ], attributes: ['rol_id' => 'rol']);
 
-        if ($this->editandoId === auth()->id() && $datos['rol'] !== Rol::Administrador->value) {
-            $this->addError('rol', 'No puede quitarse a sí mismo el rol de Administrador.');
+        if ($this->editandoId === auth()->id() && Rol::find($datos['rol_id'])?->slug !== Rol::ADMINISTRADOR) {
+            $this->addError('rol_id', 'No puede quitarse a sí mismo el rol de Administrador.');
 
             return;
         }
@@ -139,8 +156,44 @@ new #[Title('Usuarios')] class extends Component {
         $this->mostrarContrasena($usuario, $contrasena);
     }
 
+    public function solicitarRestablecimiento(User $usuario): void
+    {
+        $this->pedirConfirmacion(
+            'restablecerContrasena',
+            $usuario->id,
+            'Restablecer contraseña',
+            "¿Desea generar una contraseña temporal nueva para {$usuario->name}? La actual dejará de funcionar y la cuenta se desbloqueará.",
+            'Restablecer',
+            peligro: false,
+        );
+    }
+
+    public function solicitarCambioEstado(User $usuario): void
+    {
+        $this->pedirConfirmacion(
+            'cambiarEstado',
+            $usuario->id,
+            $usuario->activo ? 'Desactivar usuario' : 'Activar usuario',
+            $usuario->activo
+                ? "¿Desea desactivar la cuenta de {$usuario->name}? No podrá ingresar al sistema, pero sus registros y su historial se conservan."
+                : "¿Desea activar la cuenta de {$usuario->name}? Podrá volver a ingresar con su contraseña actual.",
+            $usuario->activo ? 'Desactivar' : 'Activar',
+            peligro: $usuario->activo,
+        );
+    }
+
+    /**
+     * @return list<string>
+     */
+    protected function accionesConfirmables(): array
+    {
+        return ['restablecerContrasena', 'cambiarEstado'];
+    }
+
     public function restablecerContrasena(User $usuario): void
     {
+        Gate::authorize('usuarios.restablecer');
+
         if ($usuario->is(auth()->user())) {
             Flux::toast(variant: 'danger', text: 'Cambie su propia contraseña desde Configuración.');
 
@@ -163,6 +216,8 @@ new #[Title('Usuarios')] class extends Component {
 
     public function desbloquear(User $usuario): void
     {
+        Gate::authorize('usuarios.restablecer');
+
         $usuario->desbloquear();
 
         Bitacora::registrar('usuario_desbloqueado', $usuario);
@@ -171,6 +226,8 @@ new #[Title('Usuarios')] class extends Component {
 
     public function cambiarEstado(User $usuario): void
     {
+        Gate::authorize('usuarios.activar');
+
         if ($usuario->is(auth()->user())) {
             Flux::toast(variant: 'danger', text: 'No puede desactivar su propia cuenta.');
 
@@ -210,7 +267,7 @@ new #[Title('Usuarios')] class extends Component {
             'name' => $usuario->name,
             'email' => $usuario->email,
             'gerencia_id' => $usuario->gerencia_id,
-            'rol' => $usuario->rol->value,
+            'rol_id' => $usuario->rol_id,
         ];
     }
 }; ?>
@@ -222,7 +279,9 @@ new #[Title('Usuarios')] class extends Component {
             <flux:subheading>Cuentas con acceso al sistema. Las crea y restablece el Administrador.</flux:subheading>
         </div>
 
-        <flux:button variant="primary" icon="plus" wire:click="crear">Nuevo usuario</flux:button>
+        @can('usuarios.crear')
+            <flux:button variant="primary" icon="plus" wire:click="crear">Nuevo usuario</flux:button>
+        @endcan
     </div>
 
     <flux:input wire:model.live.debounce.300ms="buscar" icon="magnifying-glass" placeholder="Buscar por nombre o correo…" class="max-w-md" clearable />
@@ -246,7 +305,7 @@ new #[Title('Usuarios')] class extends Component {
                             <span class="block text-xs text-zinc-500">{{ $usuario->email }}</span>
                         </flux:table.cell>
                         <flux:table.cell class="font-mono text-sm">{{ $usuario->gerencia?->siglas ?? '—' }}</flux:table.cell>
-                        <flux:table.cell>{{ $usuario->rol->etiqueta() }}</flux:table.cell>
+                        <flux:table.cell>{{ $usuario->rol?->nombre ?? 'Sin rol' }}</flux:table.cell>
                         <flux:table.cell>
                             <flux:badge size="sm" inset="top bottom" :color="match ($estado) { 'Activo' => 'green', 'Bloqueado' => 'red', default => 'zinc' }">
                                 {{ $estado }}
@@ -260,20 +319,27 @@ new #[Title('Usuarios')] class extends Component {
                                 <flux:button size="sm" variant="ghost" icon="ellipsis-horizontal" aria-label="Acciones" />
 
                                 <flux:menu>
-                                    <flux:menu.item icon="pencil-square" wire:click="editar({{ $usuario->id }})">Editar</flux:menu.item>
+                                    @can('usuarios.editar')
+                                        <flux:menu.item icon="pencil-square" wire:click="editar({{ $usuario->id }})">Editar</flux:menu.item>
+                                    @endcan
                                     @if ($usuario->estaBloqueado())
-                                        <flux:menu.item icon="lock-open" wire:click="desbloquear({{ $usuario->id }})">Desbloquear</flux:menu.item>
+                                        @can('usuarios.restablecer')
+                                            <flux:menu.item icon="lock-open" wire:click="desbloquear({{ $usuario->id }})">Desbloquear</flux:menu.item>
+                                        @endcan
                                     @endif
                                     @unless ($usuario->is(auth()->user()))
-                                        <flux:menu.item icon="key" wire:click="restablecerContrasena({{ $usuario->id }})" wire:confirm="¿Generar una contraseña temporal nueva para {{ $usuario->name }}?">Restablecer contraseña</flux:menu.item>
-                                        <flux:menu.item
-                                            :icon="$usuario->activo ? 'no-symbol' : 'check-circle'"
-                                            :variant="$usuario->activo ? 'danger' : 'default'"
-                                            wire:click="cambiarEstado({{ $usuario->id }})"
-                                            wire:confirm="{{ $usuario->activo ? '¿Desactivar esta cuenta? El usuario no podrá ingresar.' : '¿Activar esta cuenta?' }}"
-                                        >
-                                            {{ $usuario->activo ? 'Desactivar' : 'Activar' }}
-                                        </flux:menu.item>
+                                        @can('usuarios.restablecer')
+                                            <flux:menu.item icon="key" wire:click="solicitarRestablecimiento({{ $usuario->id }})">Restablecer contraseña</flux:menu.item>
+                                        @endcan
+                                        @can('usuarios.activar')
+                                            <flux:menu.item
+                                                :icon="$usuario->activo ? 'no-symbol' : 'check-circle'"
+                                                :variant="$usuario->activo ? 'danger' : 'default'"
+                                                wire:click="solicitarCambioEstado({{ $usuario->id }})"
+                                            >
+                                                {{ $usuario->activo ? 'Desactivar' : 'Activar' }}
+                                            </flux:menu.item>
+                                        @endcan
                                     @endunless
                                 </flux:menu>
                             </flux:dropdown>
@@ -287,6 +353,8 @@ new #[Title('Usuarios')] class extends Component {
             </flux:table.rows>
         </flux:table>
     </div>
+
+    <x-modal-confirmacion :confirmacion="$confirmacion" />
 
     <flux:modal name="usuario" class="w-full max-w-lg">
         <form wire:submit="guardar" class="space-y-5">
@@ -307,9 +375,10 @@ new #[Title('Usuarios')] class extends Component {
                 @endforeach
             </flux:select>
 
-            <flux:select wire:model="rol" label="Rol">
-                @foreach (\App\Enums\Rol::cases() as $opcion)
-                    <flux:select.option :value="$opcion->value">{{ $opcion->etiqueta() }}</flux:select.option>
+            <flux:select wire:model="rol_id" label="Rol">
+                <flux:select.option value="">Seleccione un rol</flux:select.option>
+                @foreach ($this->roles as $rol)
+                    <flux:select.option :value="$rol->id">{{ $rol->nombre }}</flux:select.option>
                 @endforeach
             </flux:select>
 

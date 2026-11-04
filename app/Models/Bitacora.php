@@ -98,6 +98,13 @@ class Bitacora extends Model
         'usuario_desactivado' => 'Usuario desactivado',
         'usuario_desbloqueado' => 'Usuario desbloqueado',
         'contrasena_restablecida' => 'Contraseña restablecida por el Administrador',
+        'rol_creado' => 'Rol creado',
+        'rol_editado' => 'Rol editado',
+        'rol_activado' => 'Rol activado',
+        'rol_desactivado' => 'Rol desactivado',
+        'memorando_registrado' => 'Memorando registrado',
+        'documento_consultado' => 'PDF consultado',
+        'documento_descargado' => 'PDF descargado',
     ];
 
     /**
@@ -107,6 +114,7 @@ class Bitacora extends Model
      */
     public const ENTIDADES = [
         'User' => 'Usuario',
+        'Rol' => 'Rol',
         'Gerencia' => 'Gerencia',
         'Memorando' => 'Memorando',
         'Registro' => 'Registro',

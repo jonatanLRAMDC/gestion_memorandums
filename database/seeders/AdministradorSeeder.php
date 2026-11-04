@@ -2,8 +2,8 @@
 
 namespace Database\Seeders;
 
-use App\Enums\Rol;
 use App\Models\Gerencia;
+use App\Models\Rol;
 use App\Models\User;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Str;
@@ -31,7 +31,7 @@ class AdministradorSeeder extends Seeder
             'email' => $datos['email'],
             'password' => $contrasena,
             'gerencia_id' => Gerencia::propia()?->id,
-            'rol' => Rol::Administrador,
+            'rol_id' => Rol::porSlug(Rol::ADMINISTRADOR)?->id,
             'activo' => true,
             'debe_cambiar_contrasena' => true,
         ]);

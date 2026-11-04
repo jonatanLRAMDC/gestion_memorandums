@@ -2,7 +2,7 @@
 
 namespace App\Models;
 
-use App\Enums\Rol;
+use App\Enums\Permiso;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -25,7 +25,7 @@ class User extends Authenticatable
         'email',
         'password',
         'gerencia_id',
-        'rol',
+        'rol_id',
         'activo',
         'debe_cambiar_contrasena',
     ];
@@ -50,7 +50,6 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
-            'rol' => Rol::class,
             'activo' => 'boolean',
             'intentos_fallidos' => 'integer',
             'bloqueado_en' => 'datetime',
@@ -78,14 +77,36 @@ class User extends Authenticatable
             ->implode('');
     }
 
+    /**
+     * @return BelongsTo<Rol, $this>
+     */
+    public function rol(): BelongsTo
+    {
+        return $this->belongsTo(Rol::class);
+    }
+
     public function esAdministrador(): bool
     {
-        return $this->rol === Rol::Administrador;
+        return $this->rol?->esAdministrador() ?? false;
+    }
+
+    /**
+     * Indica si el usuario tiene el permiso a través de su rol activo.
+     */
+    public function tienePermiso(Permiso|string $permiso): bool
+    {
+        $permiso = $permiso instanceof Permiso ? $permiso : Permiso::tryFrom($permiso);
+
+        if (! $permiso || ! $this->puedeIngresar() || ! $this->rol?->activo) {
+            return false;
+        }
+
+        return $this->rol->tiene($permiso);
     }
 
     public function puedeRegistrarMemos(): bool
     {
-        return in_array($this->rol, [Rol::Recepcion, Rol::Administrador], true);
+        return $this->tienePermiso(Permiso::MemorandosRegistrar);
     }
 
     public function estaBloqueado(): bool

@@ -57,6 +57,14 @@ class Memorando extends Model
     }
 
     /**
+     * Fecha del memo con el formato dd/mm/aaaa.
+     */
+    public function fechaMemoTexto(): string
+    {
+        return $this->fecha_memo->format('d/m/Y');
+    }
+
+    /**
      * @return BelongsTo<Gerencia, $this>
      */
     public function gerenciaEmisora(): BelongsTo
