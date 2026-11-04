@@ -1,14 +1,11 @@
 <?php
 
-use App\Models\User;
+use App\Models\Bitacora;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Session;
-use Illuminate\Validation\Rule;
 use Livewire\Volt\Component;
 
 new class extends Component {
     public string $name = '';
-    public string $email = '';
 
     /**
      * Mount the component.
@@ -16,7 +13,6 @@ new class extends Component {
     public function mount(): void
     {
         $this->name = Auth::user()->name;
-        $this->email = Auth::user()->email;
     }
 
     /**
@@ -28,90 +24,41 @@ new class extends Component {
 
         $validated = $this->validate([
             'name' => ['required', 'string', 'max:255'],
-
-            'email' => [
-                'required',
-                'string',
-                'lowercase',
-                'email',
-                'max:255',
-                Rule::unique(User::class)->ignore($user->id)
-            ],
         ]);
 
-        $user->fill($validated);
+        $antes = $user->only('name');
 
-        if ($user->isDirty('email')) {
-            $user->email_verified_at = null;
-        }
+        $user->fill($validated)->save();
 
-        $user->save();
+        Bitacora::registrar('edicion_perfil', $user, $antes, $user->only('name'));
 
         $this->dispatch('profile-updated', name: $user->name);
-    }
-
-    /**
-     * Send an email verification notification to the current user.
-     */
-    public function resendVerificationNotification(): void
-    {
-        $user = Auth::user();
-
-        if ($user->hasVerifiedEmail()) {
-            $this->redirectIntended(default: route('dashboard', absolute: false));
-
-            return;
-        }
-
-        $user->sendEmailVerificationNotification();
-
-        Session::flash('status', 'verification-link-sent');
     }
 }; ?>
 
 <section class="w-full">
     @include('partials.settings-heading')
 
-    <x-settings.layout heading="Profile" subheading="Update your name and email address">
+    <x-settings.layout heading="Perfil" subheading="Actualice su nombre. El correo, la gerencia y el rol los administra el Administrador.">
         <form wire:submit="updateProfileInformation" class="my-6 w-full space-y-6">
-            <flux:input wire:model="name" label="{{ __('Name') }}" type="text" name="name" required autofocus autocomplete="name" />
+            <flux:input wire:model="name" label="Nombre" type="text" name="name" required autofocus autocomplete="name" />
 
-            <div>
-                <flux:input wire:model="email" label="{{ __('Email') }}" type="email" name="email" required autocomplete="email" />
+            <flux:input label="Correo electrónico" :value="auth()->user()->email" readonly disabled />
 
-                @if (auth()->user() instanceof \Illuminate\Contracts\Auth\MustVerifyEmail &&! auth()->user()->hasVerifiedEmail())
-                    <div>
-                        <p class="mt-2 text-sm text-gray-800">
-                            {{ __('Your email address is unverified.') }}
-
-                            <button
-                                wire:click.prevent="resendVerificationNotification"
-                                class="rounded-md text-sm text-gray-600 underline hover:text-gray-900 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-                            >
-                                {{ __('Click here to re-send the verification email.') }}
-                            </button>
-                        </p>
-
-                        @if (session('status') === 'verification-link-sent')
-                            <p class="mt-2 text-sm font-medium text-green-600">
-                                {{ __('A new verification link has been sent to your email address.') }}
-                            </p>
-                        @endif
-                    </div>
-                @endif
+            <div class="grid gap-6 sm:grid-cols-2">
+                <flux:input label="Gerencia" :value="auth()->user()->gerencia?->nombre ?? 'Sin gerencia'" readonly disabled />
+                <flux:input label="Rol" :value="auth()->user()->rol->etiqueta()" readonly disabled />
             </div>
 
             <div class="flex items-center gap-4">
                 <div class="flex items-center justify-end">
-                    <flux:button variant="primary" type="submit" class="w-full">{{ __('Save') }}</flux:button>
+                    <flux:button variant="primary" type="submit" class="w-full">Guardar</flux:button>
                 </div>
 
                 <x-action-message class="me-3" on="profile-updated">
-                    {{ __('Saved.') }}
+                    Guardado.
                 </x-action-message>
             </div>
         </form>
-
-        <livewire:settings.delete-user-form />
     </x-settings.layout>
 </section>

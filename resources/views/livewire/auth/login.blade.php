@@ -1,5 +1,7 @@
 <?php
 
+use App\Models\Bitacora;
+use App\Models\User;
 use Illuminate\Auth\Events\Lockout;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\RateLimiter;
@@ -28,18 +30,57 @@ new #[Layout('components.layouts.auth')] class extends Component {
 
         $this->ensureIsNotRateLimited();
 
+        $user = User::query()->where('email', $this->email)->first();
+
+        if ($user && ! $user->puedeIngresar()) {
+            Bitacora::registrar('ingreso_rechazado', $user, despues: ['motivo' => $user->estadoCuenta()], usuarioId: $user->id);
+
+            throw ValidationException::withMessages(['email' => __('auth.blocked')]);
+        }
+
         if (! Auth::attempt(['email' => $this->email, 'password' => $this->password], $this->remember)) {
             RateLimiter::hit($this->throttleKey());
 
-            throw ValidationException::withMessages([
-                'email' => __('auth.failed'),
-            ]);
+            $this->registrarIntentoFallido($user);
         }
 
         RateLimiter::clear($this->throttleKey());
         Session::regenerate();
 
-        $this->redirectIntended(default: route('dashboard', absolute: false), navigate: true);
+        $user->reiniciarIntentos();
+
+        $destino = $user->debe_cambiar_contrasena
+            ? route('settings.password', absolute: false)
+            : route('dashboard', absolute: false);
+
+        $this->redirectIntended(default: $destino, navigate: true);
+    }
+
+    /**
+     * Cuenta el intento fallido y bloquea la cuenta al llegar al límite.
+     *
+     * @throws ValidationException
+     */
+    protected function registrarIntentoFallido(?User $user): never
+    {
+        if (! $user) {
+            Bitacora::registrar('ingreso_fallido', despues: ['email' => Str::lower($this->email)]);
+
+            throw ValidationException::withMessages(['email' => __('auth.failed')]);
+        }
+
+        $quedoBloqueada = $user->registrarIntentoFallido();
+
+        Bitacora::registrar(
+            $quedoBloqueada ? 'cuenta_bloqueada' : 'ingreso_fallido',
+            $user,
+            despues: ['intentos_fallidos' => $user->intentos_fallidos],
+            usuarioId: $user->id,
+        );
+
+        throw ValidationException::withMessages([
+            'email' => $quedoBloqueada ? __('auth.locked_now') : __('auth.failed'),
+        ]);
     }
 
     /**
@@ -73,44 +114,31 @@ new #[Layout('components.layouts.auth')] class extends Component {
 }; ?>
 
 <div class="flex flex-col gap-6">
-    <x-auth-header title="Log in to your account" description="Enter your email and password below to log in" />
+    <x-auth-header title="Iniciar sesión" description="Ingrese su correo institucional y su contraseña" />
 
     <!-- Session Status -->
     <x-auth-session-status class="text-center" :status="session('status')" />
 
-    <form wire:submit="login" class="flex flex-col gap-6">
-        <!-- Email Address -->
-        <flux:input wire:model="email" label="{{ __('Email address') }}" type="email" name="email" required autofocus autocomplete="email" placeholder="email@example.com" />
+    <form wire:submit="login" class="flex flex-col gap-5">
+        <flux:input wire:model="email" label="Correo electrónico" type="email" name="email" required autofocus autocomplete="email" placeholder="usuario@amdc.hn" />
 
-        <!-- Password -->
-        <div class="relative">
-            <flux:input
-                wire:model="password"
-                label="{{ __('Password') }}"
-                type="password"
-                name="password"
-                required
-                autocomplete="current-password"
-                placeholder="Password"
-            />
+        <flux:input
+            wire:model="password"
+            label="Contraseña"
+            type="password"
+            name="password"
+            required
+            autocomplete="current-password"
+            placeholder="Contraseña"
+            viewable
+        />
 
-            @if (Route::has('password.request'))
-                <x-text-link class="absolute right-0 top-0" href="{{ route('password.request') }}">
-                    {{ __('Forgot your password?') }}
-                </x-text-link>
-            @endif
-        </div>
+        <flux:checkbox wire:model="remember" label="Recordarme" />
 
-        <!-- Remember Me -->
-        <flux:checkbox wire:model="remember" label="{{ __('Remember me') }}" />
-
-        <div class="flex items-center justify-end">
-            <flux:button variant="primary" type="submit" class="w-full">{{ __('Log in') }}</flux:button>
-        </div>
+        <flux:button variant="primary" type="submit" class="w-full">Iniciar sesión</flux:button>
     </form>
 
-    <div class="space-x-1 text-center text-sm text-zinc-600 dark:text-zinc-400">
-        Don't have an account?
-        <x-text-link href="{{ route('register') }}">Sign up</x-text-link>
-    </div>
+    <p class="text-center text-sm text-zinc-500 dark:text-zinc-400">
+        ¿Olvidó su contraseña? Contacte al administrador del sistema.
+    </p>
 </div>

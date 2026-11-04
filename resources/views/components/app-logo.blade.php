@@ -1,6 +1,5 @@
-<div class="flex aspect-square size-8 items-center justify-center rounded-md bg-accent-content text-accent-foreground">
-    <x-app-logo-icon class="size-5 fill-current text-white dark:text-black" />
-</div>
-<div class="ml-1 grid flex-1 text-left text-sm">
-    <span class="mb-0.5 truncate leading-none font-semibold">Laravel Starter Kit</span>
+<x-escudo class="size-10 shrink-0 !bg-white/15 ring-1 ring-white/30" />
+<div class="ml-1 grid flex-1 text-left leading-tight">
+    <span class="truncate text-base font-semibold text-white">file.amdc.hn</span>
+    <span class="truncate text-xs text-white/75">Registro de memorandos</span>
 </div>

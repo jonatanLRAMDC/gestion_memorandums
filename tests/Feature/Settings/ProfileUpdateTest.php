@@ -1,75 +1,39 @@
 <?php
 
 use App\Models\User;
+use Livewire\Exceptions\PublicPropertyNotFoundException;
 use Livewire\Volt\Volt;
 
 test('profile page is displayed', function () {
     $this->actingAs($user = User::factory()->create());
 
-    $this->get('/settings/profile')->assertOk();
+    $this->get('/settings/profile')
+        ->assertOk()
+        ->assertSee($user->email)
+        ->assertSee($user->gerencia->nombre);
 });
 
-test('profile information can be updated', function () {
+test('profile name can be updated', function () {
     $user = User::factory()->create();
 
     $this->actingAs($user);
 
-    $response = Volt::test('settings.profile')
-        ->set('name', 'Test User')
-        ->set('email', 'test@example.com')
-        ->call('updateProfileInformation');
+    Volt::test('settings.profile')
+        ->set('name', 'Nombre Actualizado')
+        ->call('updateProfileInformation')
+        ->assertHasNoErrors();
 
-    $response->assertHasNoErrors();
-
-    $user->refresh();
-
-    expect($user->name)->toEqual('Test User');
-    expect($user->email)->toEqual('test@example.com');
-    expect($user->email_verified_at)->toBeNull();
+    expect($user->refresh()->name)->toEqual('Nombre Actualizado');
 });
 
-test('email verification status is unchanged when email address is unchanged', function () {
-    $user = User::factory()->create();
+test('users can not change their own email from the profile', function () {
+    $this->actingAs(User::factory()->create());
 
-    $this->actingAs($user);
+    Volt::test('settings.profile')->set('email', 'otro@amdc.hn');
+})->throws(PublicPropertyNotFoundException::class);
 
-    $response = Volt::test('settings.profile')
-        ->set('name', 'Test User')
-        ->set('email', $user->email)
-        ->call('updateProfileInformation');
+test('users can not delete their own account', function () {
+    $this->actingAs(User::factory()->create());
 
-    $response->assertHasNoErrors();
-
-    expect($user->refresh()->email_verified_at)->not->toBeNull();
-});
-
-test('user can delete their account', function () {
-    $user = User::factory()->create();
-
-    $this->actingAs($user);
-
-    $response = Volt::test('settings.delete-user-form')
-        ->set('password', 'password')
-        ->call('deleteUser');
-
-    $response
-        ->assertHasNoErrors()
-        ->assertRedirect('/');
-
-    expect($user->fresh())->toBeNull();
-    expect(auth()->check())->toBeFalse();
-});
-
-test('correct password must be provided to delete account', function () {
-    $user = User::factory()->create();
-
-    $this->actingAs($user);
-
-    $response = Volt::test('settings.delete-user-form')
-        ->set('password', 'wrong-password')
-        ->call('deleteUser');
-
-    $response->assertHasErrors(['password']);
-
-    expect($user->fresh())->not->toBeNull();
+    $this->get('/settings/profile')->assertDontSee('Delete account');
 });

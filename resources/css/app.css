@@ -23,16 +23,26 @@
     --color-zinc-900: #171717;
     --color-zinc-950: #0a0a0a;
 
-    --color-accent: var(--color-neutral-800);
-    --color-accent-content: var(--color-neutral-800);
+    /* Azul institucional AMDC */
+    --color-amdc-50: #eef3fb;
+    --color-amdc-100: #dbe6f7;
+    --color-amdc-200: #b9cdef;
+    --color-amdc-500: #2f63c4;
+    --color-amdc-600: #2455b3;
+    --color-amdc-700: #1e4a9e;
+    --color-amdc-800: #183d84;
+    --color-amdc-900: #11306b;
+
+    --color-accent: var(--color-amdc-700);
+    --color-accent-content: var(--color-amdc-700);
     --color-accent-foreground: var(--color-white);
 }
 
 @layer theme {
     .dark {
-        --color-accent: var(--color-white);
-        --color-accent-content: var(--color-white);
-        --color-accent-foreground: var(--color-neutral-800);
+        --color-accent: var(--color-amdc-500);
+        --color-accent-content: var(--color-amdc-200);
+        --color-accent-foreground: var(--color-white);
     }
 }
 

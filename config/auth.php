@@ -1,5 +1,7 @@
 <?php
 
+use App\Models\User;
+
 return [
 
     /*
@@ -62,7 +64,7 @@ return [
     'providers' => [
         'users' => [
             'driver' => 'eloquent',
-            'model' => env('AUTH_MODEL', App\Models\User::class),
+            'model' => env('AUTH_MODEL', User::class),
         ],
 
         // 'users' => [
@@ -111,5 +113,17 @@ return [
     */
 
     'password_timeout' => env('AUTH_PASSWORD_TIMEOUT', 10800),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Bloqueo de cuentas
+    |--------------------------------------------------------------------------
+    |
+    | Cantidad de intentos fallidos seguidos de inicio de sesión que bloquean
+    | la cuenta hasta que un Administrador la desbloquee.
+    |
+    */
+
+    'max_intentos' => (int) env('AUTH_MAX_INTENTOS', 5),
 
 ];
