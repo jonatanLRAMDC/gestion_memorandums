@@ -30,8 +30,8 @@ function memoEmitido(array $cambios = []): Testable
         ->set('form.correlativo', '398')
         ->set('form.destinos.0.gerencia_id', test()->rrhh->id)
         ->set('form.asunto', 'Organización de turnos y rotación de teletrabajo')
-        ->set('form.fecha_memo', '29/09/2026')
-        ->set('form.fecha_movimiento', '30/09/2026')
+        ->set('form.fecha_memo', '2026-09-29')
+        ->set('form.fecha_movimiento', '2026-09-30')
         ->set('form.pdf', pdfDePrueba(2));
 
     foreach ($cambios as $campo => $valor) {
@@ -73,8 +73,8 @@ test('choosing the sender of a received memo fills its siglas and titular', func
         ->assertSet('form.persona_destinataria', 'Ing. Roberto Euceda')
         ->set('form.correlativo', '0120')
         ->set('form.asunto', 'Planilla complementaria')
-        ->set('form.fecha_memo', '01/10/2026')
-        ->set('form.fecha_movimiento', '02/10/2026')
+        ->set('form.fecha_memo', '2026-10-01')
+        ->set('form.fecha_movimiento', '2026-10-02')
         ->set('form.pdf', pdfDePrueba(1))
         ->call('guardar')
         ->assertHasNoErrors();
@@ -89,7 +89,7 @@ test('choosing the sender of a received memo fills its siglas and titular', func
 
 test('the year follows the date of the memo', function () {
     Volt::test('memorandos.registrar', ['tipo' => 'emitido'])
-        ->set('form.fecha_memo', '30/12/2025')
+        ->set('form.fecha_memo', '2025-12-30')
         ->assertSet('form.anio', 2025);
 });
 
@@ -120,22 +120,28 @@ test('a truncated PDF is rejected', function () {
         ->assertHasErrors('form.pdf');
 });
 
-test('dates must be written as dd/mm/aaaa', function () {
-    memoEmitido(['form.fecha_memo' => '2026-09-29'])
+test('invalid dates are rejected', function () {
+    memoEmitido(['form.fecha_memo' => '29/09/2026'])
         ->call('guardar')
         ->assertHasErrors('form.fecha_memo');
 
-    memoEmitido(['form.fecha_memo' => '31/02/2026'])
+    memoEmitido(['form.fecha_memo' => '2026-02-31'])
         ->call('guardar')
         ->assertHasErrors('form.fecha_memo');
 });
 
+test('selected dates are shown in words below each field', function () {
+    memoEmitido(['form.fecha_memo' => '2026-11-05'])
+        ->assertSee('05 de noviembre de 2026')
+        ->assertSee('30 de septiembre de 2026');
+});
+
 test('dates must be coherent', function () {
-    memoEmitido(['form.fecha_movimiento' => '01/09/2026'])
+    memoEmitido(['form.fecha_movimiento' => '2026-09-01'])
         ->call('guardar')
         ->assertHasErrors('form.fecha_movimiento');
 
-    memoEmitido(['form.fecha_memo' => '01/12/2026'])
+    memoEmitido(['form.fecha_memo' => '2026-12-01'])
         ->call('guardar')
         ->assertHasErrors('form.fecha_memo');
 });

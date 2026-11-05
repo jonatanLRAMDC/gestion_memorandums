@@ -51,7 +51,7 @@ class MemorandoForm extends Form
     public string $asunto = '';
 
     /**
-     * Fechas en formato dd/mm/aaaa, tal como se escriben en el formulario.
+     * Fechas en formato aaaa-mm-dd, como las entrega el selector de fecha.
      */
     public string $fecha_memo = '';
 
@@ -78,7 +78,7 @@ class MemorandoForm extends Form
     {
         $this->tipo = $tipo->value;
         $this->anio = (int) now()->year;
-        $this->fecha_movimiento = now()->format('d/m/Y');
+        $this->fecha_movimiento = now()->toDateString();
 
         if ($tipo === TipoRegistro::Emitido) {
             $this->siglas = (string) $propia->siglas;
@@ -148,8 +148,8 @@ class MemorandoForm extends Form
             'destinos.*.tipo' => ['required', Rule::enum(TipoDestino::class)],
             'persona_destinataria' => ['nullable', 'string', 'max:150'],
             'asunto' => ['required', 'string', 'max:255'],
-            'fecha_memo' => ['required', 'date_format:d/m/Y', 'before_or_equal:today'],
-            'fecha_movimiento' => ['required', 'date_format:d/m/Y', 'after_or_equal:fecha_memo', 'before_or_equal:today'],
+            'fecha_memo' => ['required', 'date_format:Y-m-d', 'before_or_equal:today'],
+            'fecha_movimiento' => ['required', 'date_format:Y-m-d', 'after_or_equal:fecha_memo', 'before_or_equal:today'],
             'observaciones' => ['nullable', 'string', 'max:1000'],
             'pdf' => ['required', 'file', 'mimetypes:application/pdf', 'max:'.config('memorandos.pdf_max_kb'), new PdfValido],
         ];
@@ -168,8 +168,8 @@ class MemorandoForm extends Form
             'destinos.*.gerencia_id.required' => 'Seleccione la gerencia destinataria.',
             'destinos.*.gerencia_id.distinct' => 'Esta gerencia ya está en la lista.',
             'destinos.*.gerencia_id.not_in' => 'Un memo emitido no puede dirigirse a la propia gerencia.',
-            'fecha_memo.date_format' => 'Escriba la fecha como dd/mm/aaaa.',
-            'fecha_movimiento.date_format' => 'Escriba la fecha como dd/mm/aaaa.',
+            'fecha_memo.date_format' => 'Seleccione una fecha válida en el calendario.',
+            'fecha_movimiento.date_format' => 'Seleccione una fecha válida en el calendario.',
             'fecha_memo.before_or_equal' => 'La fecha del memo no puede ser futura.',
             'fecha_movimiento.after_or_equal' => 'La fecha no puede ser anterior a la fecha del memo.',
             'fecha_movimiento.before_or_equal' => 'La fecha no puede ser futura.',
@@ -238,7 +238,7 @@ class MemorandoForm extends Form
                     'remitente_nombre' => $this->vacioANulo($this->remitente_nombre),
                     'remitente_cargo' => $this->vacioANulo($this->remitente_cargo),
                     'asunto' => trim($this->asunto),
-                    'fecha_memo' => self::fechaIso($this->fecha_memo),
+                    'fecha_memo' => $this->fecha_memo,
                     'creado_por' => $usuario->id,
                 ]);
 
@@ -257,7 +257,7 @@ class MemorandoForm extends Form
                 $memorando->registros()->create([
                     'gerencia_id' => $propia->id,
                     'tipo' => $this->tipo,
-                    'fecha_movimiento' => self::fechaIso($this->fecha_movimiento),
+                    'fecha_movimiento' => $this->fecha_movimiento,
                     'observaciones' => $this->vacioANulo($this->observaciones),
                     'usuario_id' => $usuario->id,
                 ]);
@@ -334,20 +334,24 @@ class MemorandoForm extends Form
     }
 
     /**
-     * Convierte una fecha dd/mm/aaaa al formato de la base de datos (aaaa-mm-dd).
-     * Devuelve null si el texto no es una fecha válida.
+     * Fecha aaaa-mm-dd escrita en letras, p. ej. "05 de noviembre de 2026".
+     * Devuelve una cadena vacía si la fecha no es válida.
      */
-    public static function fechaIso(?string $fecha): ?string
+    public static function fechaEnLetras(?string $fecha): string
     {
         $fecha = trim((string) $fecha);
 
-        if (! preg_match('/^\d{2}\/\d{2}\/\d{4}$/', $fecha)) {
-            return null;
+        if (! preg_match('/^\d{4}-\d{2}-\d{2}$/', $fecha)) {
+            return '';
         }
 
-        $resultado = Carbon::createFromFormat('!d/m/Y', $fecha);
+        $resultado = Carbon::createFromFormat('!Y-m-d', $fecha);
 
-        return $resultado && $resultado->format('d/m/Y') === $fecha ? $resultado->toDateString() : null;
+        if (! $resultado || $resultado->toDateString() !== $fecha) {
+            return '';
+        }
+
+        return $resultado->locale('es')->translatedFormat('d \d\e F \d\e Y');
     }
 
     protected function vacioANulo(?string $valor): ?string

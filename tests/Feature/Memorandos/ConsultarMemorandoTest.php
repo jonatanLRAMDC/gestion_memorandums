@@ -123,14 +123,14 @@ test('the dashboard counts the memos of the user gerencia', function () {
         ->assertSee('Memorandos recientes');
 });
 
-test('the list can be filtered by memo date written as dd/mm/aaaa', function () {
+test('the list can be filtered by memo date', function () {
     $septiembre = memoRegistrado($this->gis, TipoRegistro::Emitido, ['fecha_memo' => '2026-09-15']);
     $octubre = memoRegistrado($this->gis, TipoRegistro::Emitido, ['fecha_memo' => '2026-10-15']);
 
     $this->actingAs($this->usuario);
 
     Volt::test('memorandos.index')
-        ->set('desde', '01/10/2026')
+        ->set('desde', '2026-10-01')
         ->assertSee($octubre->numero)
         ->assertDontSee($septiembre->numero);
 });

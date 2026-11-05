@@ -1,6 +1,5 @@
 <?php
 
-use App\Livewire\Forms\MemorandoForm;
 use App\Models\Gerencia;
 use App\Models\Registro;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
@@ -42,6 +41,14 @@ new #[Title('Memorandos')] class extends Component {
     }
 
     /**
+     * Devuelve la fecha aaaa-mm-dd si es válida; si no, null para ignorar el filtro.
+     */
+    protected function fechaValida(string $fecha): ?string
+    {
+        return preg_match('/^\d{4}-\d{2}-\d{2}$/', $fecha) && strtotime($fecha) ? $fecha : null;
+    }
+
+    /**
      * @return Collection<int, Gerencia>
      */
     #[Computed]
@@ -72,8 +79,8 @@ new #[Title('Memorandos')] class extends Component {
             ->when($this->gerenciaId !== '', fn (Builder $query) => $query->whereHas('memorando', fn (Builder $memo) => $memo
                 ->where('gerencia_emisora_id', $this->gerenciaId)
                 ->orWhereHas('destinos', fn (Builder $destino) => $destino->where('gerencia_id', $this->gerenciaId))))
-            ->when(MemorandoForm::fechaIso($this->desde), fn (Builder $query, string $desde) => $query->whereHas('memorando', fn (Builder $memo) => $memo->whereDate('fecha_memo', '>=', $desde)))
-            ->when(MemorandoForm::fechaIso($this->hasta), fn (Builder $query, string $hasta) => $query->whereHas('memorando', fn (Builder $memo) => $memo->whereDate('fecha_memo', '<=', $hasta)))
+            ->when($this->fechaValida($this->desde), fn (Builder $query, string $desde) => $query->whereHas('memorando', fn (Builder $memo) => $memo->whereDate('fecha_memo', '>=', $desde)))
+            ->when($this->fechaValida($this->hasta), fn (Builder $query, string $hasta) => $query->whereHas('memorando', fn (Builder $memo) => $memo->whereDate('fecha_memo', '<=', $hasta)))
             ->latest('fecha_movimiento')
             ->latest('id')
             ->paginate(15);
@@ -110,8 +117,8 @@ new #[Title('Memorandos')] class extends Component {
                 <flux:select.option :value="$gerencia->id">{{ $gerencia->siglas ? $gerencia->siglas.' — ' : '' }}{{ $gerencia->nombre }}</flux:select.option>
             @endforeach
         </flux:select>
-        <flux:input wire:model.live.blur="desde" x-mask="99/99/9999" placeholder="dd/mm/aaaa" icon:trailing="calendar" label="Fecha del memo desde" />
-        <flux:input wire:model.live.blur="hasta" x-mask="99/99/9999" placeholder="dd/mm/aaaa" icon:trailing="calendar" label="Hasta" />
+        <flux:input wire:model.live="desde" type="date" label="Fecha del memo desde" />
+        <flux:input wire:model.live="hasta" type="date" label="Hasta" />
         <flux:button variant="ghost" icon="x-mark" wire:click="limpiarFiltros">Limpiar</flux:button>
     </div>
 

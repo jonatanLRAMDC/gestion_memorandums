@@ -48,7 +48,7 @@ new #[Title('Registrar memorando')] class extends Component {
     /**
      * Datos del PDF cargado, para mostrarlos antes de guardar.
      *
-     * @return array{paginas: ?int, tamano: string, url: string}|null
+     * @return array{paginas: ?int, tamano: string}|null
      */
     #[Computed]
     public function infoPdf(): ?array
@@ -62,7 +62,6 @@ new #[Title('Registrar memorando')] class extends Component {
         return [
             'paginas' => PdfValido::contarPaginas($pdf->getRealPath()),
             'tamano' => Archivo::tamanoLegible($pdf->getSize()),
-            'url' => $pdf->temporaryUrl(),
         ];
     }
 
@@ -79,8 +78,8 @@ new #[Title('Registrar memorando')] class extends Component {
             $this->form->siglas = mb_strtoupper(trim((string) $valor));
         }
 
-        if ($campo === 'fecha_memo' && ($iso = MemorandoForm::fechaIso((string) $valor))) {
-            $this->form->anio = (int) substr($iso, 0, 4);
+        if ($campo === 'fecha_memo' && preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) $valor)) {
+            $this->form->anio = (int) substr((string) $valor, 0, 4);
         }
 
         if (preg_match('/^destinos\.(\d+)\.gerencia_id$/', $campo, $partes)) {
@@ -237,8 +236,14 @@ new #[Title('Registrar memorando')] class extends Component {
                     <div class="md:col-span-2">
                         <flux:input wire:model="form.asunto" label="Asunto" placeholder="Organización de turnos y rotación de teletrabajo" />
                     </div>
-                    <flux:input wire:model.live.blur="form.fecha_memo" x-mask="99/99/9999" inputmode="numeric" placeholder="dd/mm/aaaa" icon:trailing="calendar" label="Fecha del memo" />
-                    <flux:input wire:model="form.fecha_movimiento" x-mask="99/99/9999" inputmode="numeric" placeholder="dd/mm/aaaa" icon:trailing="calendar" :label="$emitido ? 'Fecha de envío' : 'Fecha de recepción'" />
+                    <div>
+                        <flux:input wire:model.live="form.fecha_memo" type="date" label="Fecha del memo" :max="now()->toDateString()" />
+                        <p class="mt-1 min-h-5 text-sm text-zinc-500" data-fecha-en-letras>{{ MemorandoForm::fechaEnLetras($form->fecha_memo) }}</p>
+                    </div>
+                    <div>
+                        <flux:input wire:model.live="form.fecha_movimiento" type="date" :label="$emitido ? 'Fecha de envío' : 'Fecha de recepción'" :max="now()->toDateString()" />
+                        <p class="mt-1 min-h-5 text-sm text-zinc-500" data-fecha-en-letras>{{ MemorandoForm::fechaEnLetras($form->fecha_movimiento) }}</p>
+                    </div>
                     <div class="md:col-span-2">
                         <flux:textarea wire:model="form.observaciones" label="Observaciones" rows="2" placeholder="Opcional" />
                     </div>
@@ -251,7 +256,19 @@ new #[Title('Registrar memorando')] class extends Component {
 
         {{-- PDF --}}
         <aside class="flex flex-col gap-4 xl:sticky xl:top-6 xl:self-start">
-            <section class="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-700 dark:bg-zinc-900">
+            <section
+                class="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-700 dark:bg-zinc-900"
+                x-data="{
+                    vista: null,
+                    mostrar(evento) {
+                        if (evento.target.type !== 'file') return
+                        if (this.vista) URL.revokeObjectURL(this.vista)
+                        let archivo = evento.target.files[0]
+                        this.vista = archivo && archivo.type === 'application/pdf' ? URL.createObjectURL(archivo) : null
+                    },
+                }"
+                x-on:change="mostrar($event)"
+            >
                 <flux:heading>PDF escaneado</flux:heading>
                 <flux:subheading>Solo PDF, hasta {{ round(config('memorandos.pdf_max_kb') / 1024) }} MB.</flux:subheading>
 
@@ -272,13 +289,16 @@ new #[Title('Registrar memorando')] class extends Component {
                         <dt class="text-zinc-500">Tamaño</dt>
                         <dd class="text-right font-medium">{{ $this->infoPdf['tamano'] }}</dd>
                     </dl>
-                    <iframe src="{{ $this->infoPdf['url'] }}" title="Vista previa del PDF" class="mt-4 h-[460px] w-full rounded-lg border border-zinc-200 dark:border-zinc-700"></iframe>
-                @else
-                    <div class="mt-4 flex h-[300px] flex-col items-center justify-center rounded-lg border-2 border-dashed border-zinc-200 text-center text-sm text-zinc-500 dark:border-zinc-700">
+                @endif
+
+                {{-- La vista previa se arma en el navegador con el archivo elegido; no se pide al servidor. --}}
+                <div wire:ignore class="mt-4">
+                    <iframe x-show="vista" x-cloak :src="vista" title="Vista previa del PDF" class="h-[520px] w-full rounded-lg border border-zinc-200 dark:border-zinc-700"></iframe>
+                    <div x-show="! vista" class="flex h-[300px] flex-col items-center justify-center rounded-lg border-2 border-dashed border-zinc-200 text-center text-sm text-zinc-500 dark:border-zinc-700">
                         <flux:icon name="document-arrow-up" class="mb-2 size-8 text-zinc-400" />
                         Aquí verá la vista previa del PDF
                     </div>
-                @endif
+                </div>
             </section>
 
             <div class="flex justify-end gap-2">
