@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Tests\TestCase;
 
 /*
@@ -44,7 +45,26 @@ expect()->extend('toBeOne', function () {
 |
 */
 
-function something()
+/**
+ * Crea un PDF mínimo y válido con la cantidad de páginas indicada.
+ */
+function pdfDePrueba(int $paginas = 2, string $nombre = 'memo.pdf', string $marca = ''): UploadedFile
 {
-    // ..
+    $objetos = ['<< /Type /Catalog /Pages 2 0 R >>'];
+    $kids = implode(' ', array_map(fn (int $i) => (3 + $i).' 0 R', range(0, $paginas - 1)));
+    $objetos[] = "<< /Type /Pages /Kids [{$kids}] /Count {$paginas} >>";
+
+    foreach (range(1, $paginas) as $pagina) {
+        $objetos[] = '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>';
+    }
+
+    $contenido = "%PDF-1.4\n";
+
+    foreach ($objetos as $indice => $objeto) {
+        $contenido .= ($indice + 1)." 0 obj\n{$objeto}\nendobj\n";
+    }
+
+    $contenido .= "% {$marca}\ntrailer\n<< /Root 1 0 R >>\n%%EOF\n";
+
+    return UploadedFile::fake()->createWithContent($nombre, $contenido);
 }
