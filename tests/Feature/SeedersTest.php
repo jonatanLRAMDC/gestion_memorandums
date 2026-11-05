@@ -38,3 +38,14 @@ test('test titulares fill every gerencia without overwriting existing ones', fun
         ->and(Gerencia::firstWhere('siglas', 'GRH')->titular_nombre)->toBe('Titular real')
         ->and(Gerencia::firstWhere('siglas', 'GIS')->titular_nombre)->toBe('Ing. Roberto Euceda');
 });
+
+test('a production installation loads the gerencias without titulares', function () {
+    $this->app['env'] = 'production';
+    config(['memorandos.admin.password' => 'clave-inicial-segura']);
+
+    $this->artisan('db:seed', ['--force' => true])->assertSuccessful();
+
+    expect(Gerencia::count())->toBe(33)
+        ->and(Gerencia::whereNotNull('titular_nombre')->count())->toBe(0)
+        ->and(User::firstWhere('email', config('memorandos.admin.email'))->esAdministrador())->toBeTrue();
+});
