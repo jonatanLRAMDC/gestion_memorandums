@@ -8,7 +8,7 @@ El sistema no genera memorandos: registra los que ya existen en papel.
 
 ## Contenido
 
-1. [Funciones de la versión 1](#funciones-de-la-versión-1)
+1. [Funciones](#funciones)
 2. [Stack tecnológico](#stack-tecnológico)
 3. [Requisitos del servidor](#requisitos-del-servidor)
 4. [Instalación en producción](#instalación-en-producción)
@@ -21,7 +21,7 @@ El sistema no genera memorandos: registra los que ya existen en papel.
 
 ---
 
-## Funciones de la versión 1
+## Funciones
 
 - **Registro de memorandos emitidos y recibidos.**
   - El número se captura por partes: `AMDC-SIGLAS-correlativo-año`.
@@ -34,13 +34,18 @@ El sistema no genera memorandos: registra los que ya existen en papel.
   - Se muestra una vista previa antes de guardar.
 - **Duplicados.** Un número no se puede registrar dos veces (`0398` cuenta igual que `398`). Si el mismo PDF ya está cargado en otro memorando, el sistema avisa.
 - **Consulta.** Listado con pestañas Todos / Emitidos / Recibidos, búsqueda y filtros. El detalle incluye el visor del PDF.
+  - El listado se ordena por fecha de registro, del más reciente al más antiguo. Un clic en los encabezados ordena por número, fecha del memo o fecha de envío o recepción; el orden queda en la dirección de la página.
+- **Edición (v1.1).** Se corrigen los datos del memorando y de su registro. La bitácora guarda solo los campos que cambiaron, con su valor anterior y el nuevo.
+- **Reemplazo del PDF con versiones (v1.1).** El PDF nuevo pasa a ser el vigente y el anterior se conserva como no vigente; ningún archivo se borra. Se pide el motivo del reemplazo. Las versiones anteriores y el historial de cambios solo los ve quien tiene ese permiso (por defecto, el Administrador).
+- **Exportación (v1.1).** El listado filtrado se descarga en Excel (.xlsx) o se abre en una vista para imprimir o guardar como PDF. Cada exportación queda en la bitácora.
+- **Reportes (v1.1).** Totales de emitidos y recibidos en un período, por mes y por gerencia, con exportación a Excel y a PDF. El período se mide por la fecha de envío o recepción.
 - **Seguridad.**
   - Los PDF se guardan fuera de la carpeta pública y solo los entrega el sistema, después de verificar los permisos del usuario.
   - Una cuenta se bloquea tras varios intentos fallidos de inicio de sesión.
   - Las contraseñas temporales se deben cambiar en el primer ingreso.
   - No existe registro público de cuentas.
-- **Administración.** Gerencias (con sus siglas y titular), Usuarios, y Roles y permisos (18 permisos en 5 módulos).
-- **Bitácora de solo lectura.** Registra inicios de sesión, cambios, y cada vez que alguien consulta o descarga un PDF.
+- **Administración.** Gerencias (con sus siglas y titular), Usuarios, y Roles y permisos (22 permisos en 6 módulos).
+- **Bitácora de solo lectura.** Registra inicios de sesión, cambios, exportaciones, y cada vez que alguien consulta o descarga un PDF. El botón **Ver** muestra el antes y el después de cada cambio.
 
 ## Stack tecnológico
 
@@ -328,6 +333,22 @@ php artisan up
 
 Haga un respaldo (siguiente sección) **antes** de cada actualización.
 
+### De la versión 1.0 a la 1.1
+
+`php artisan migrate --force` aplica dos cambios:
+
+- Agrega a la tabla `archivos` el motivo de cada versión del PDF y la fecha en que dejó de estar vigente.
+- Agrega los permisos nuevos a los roles base ya instalados:
+
+| Permiso nuevo | Recepción | Consulta |
+| --- | :---: | :---: |
+| Reemplazar el PDF de los memorandos | ✓ | |
+| Exportar el listado a Excel y PDF | ✓ | ✓ |
+| Consultar y exportar los reportes | ✓ | ✓ |
+| Ver el historial de cambios y las versiones anteriores del PDF | | |
+
+El Administrador tiene siempre todos los permisos. Los roles creados a mano no cambian; asígneles los permisos nuevos en **Roles y permisos** si los necesitan. La exportación a Excel usa la extensión `zip` de PHP, que ya está en los requisitos (compruébelo con `php -m`).
+
 ## Respaldos y restauración
 
 Un respaldo completo tiene **dos partes**. La base de datos sola no basta, porque los PDF están en archivos.
@@ -390,21 +411,23 @@ vendor/bin/pint                 # formato del código PHP
 | Las páginas no cargan bien (rutas 404 salvo la principal) | Falta `mod_rewrite` o `AllowOverride All` en Apache | `sudo a2enmod rewrite` y revise el VirtualHost |
 | Las páginas del PDF aparecen como "No determinado" | El escáner guardó esa información comprimida | Es solo informativo; el PDF se guarda y se ve igual |
 | Un usuario no puede entrar | Cuenta bloqueada o inactiva | **Usuarios** → Desbloquear o Activar |
+| La exportación a Excel da error 500 | Falta la extensión `zip` de PHP | Active `extension=zip` en `php.ini` y reinicie el servidor web |
 
 ## Estructura del proyecto
 
 ```
 app/
 ├── Enums/                  Permiso, TipoRegistro, TipoDestino
-├── Http/Controllers/       MemorandoPdfController (entrega autorizada del PDF)
+├── Http/Controllers/       Entrega autorizada del PDF y exportaciones a Excel e impresión
 ├── Http/Middleware/        Cuenta activa y cambio obligatorio de contraseña
-├── Livewire/Forms/         MemorandoForm (validación y guardado del memo)
+├── Livewire/Forms/         MemorandoForm (registro y edición) y ReemplazoPdfForm (versiones)
 ├── Models/                 Memorando, Registro, Archivo, Gerencia, Rol, User, Bitacora…
 ├── Policies/               MemorandoPolicy (quién ve o descarga cada PDF)
-└── Rules/                  PdfValido (tipo real, integridad y páginas)
+├── Rules/                  PdfValido (tipo real, integridad y páginas)
+└── Support/                LibroExcel (.xlsx sin paquetes externos), listado y reportes
 config/memorandos.php       Gerencia propia, disco y tamaño del PDF, administrador inicial
 database/seeders/           Gerencias, administrador y titulares de prueba
-resources/views/livewire/   Pantallas: memorandos, administración, ajustes y acceso
+resources/views/livewire/   Pantallas: memorandos, reportes, administración, ajustes y acceso
 tests/                      Pruebas automáticas (Pest)
 ```
 

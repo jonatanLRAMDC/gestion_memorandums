@@ -1,11 +1,13 @@
 <?php
 
 use App\Enums\Permiso;
+use App\Enums\TipoDestino;
 use App\Enums\TipoRegistro;
 use App\Models\Archivo;
 use App\Models\Bitacora;
 use App\Models\Gerencia;
 use App\Models\Memorando;
+use App\Models\MemorandoDestino;
 use App\Models\Registro;
 use App\Models\Rol;
 use App\Models\User;
@@ -133,4 +135,49 @@ test('the list can be filtered by memo date', function () {
         ->set('desde', '2026-10-01')
         ->assertSee($octubre->numero)
         ->assertDontSee($septiembre->numero);
+});
+
+test('the list shows the most recently registered memo first, whatever its dates', function () {
+    $this->travelTo(now()->subDays(2));
+    $registradoAntes = memoRegistrado($this->gis, TipoRegistro::Recibido, ['fecha_memo' => now()->toDateString()]);
+    $this->travelBack();
+    $registradoDespues = memoRegistrado($this->gis, TipoRegistro::Recibido, ['fecha_memo' => now()->subMonth()->toDateString()]);
+
+    $this->actingAs($this->usuario);
+
+    Volt::test('memorandos.index')
+        ->assertSeeInOrder([$registradoDespues->numero, $registradoAntes->numero]);
+});
+
+test('the list can be sorted by another column and the order is kept in the url', function () {
+    $antiguo = memoRegistrado($this->gis, TipoRegistro::Emitido, ['fecha_memo' => '2026-01-10']);
+    $reciente = memoRegistrado($this->gis, TipoRegistro::Emitido, ['fecha_memo' => '2026-06-10']);
+
+    $this->actingAs($this->usuario);
+
+    Volt::test('memorandos.index')
+        ->call('ordenarPor', 'fecha_memo')
+        ->assertSet('orden', 'fecha_memo')
+        ->assertSet('direccion', 'desc')
+        ->assertSeeInOrder([$reciente->numero, $antiguo->numero])
+        ->call('ordenarPor', 'fecha_memo')
+        ->assertSet('direccion', 'asc')
+        ->assertSeeInOrder([$antiguo->numero, $reciente->numero])
+        ->call('ordenarPor', 'columna_inexistente')
+        ->assertSet('orden', 'fecha_memo');
+});
+
+test('the detail page separates the PARA and COPIA recipients without repeating the label', function () {
+    $memo = memoRegistrado($this->gis, TipoRegistro::Emitido);
+    $presupuesto = Gerencia::factory()->create(['nombre' => 'Gerencia de Presupuesto']);
+    $finanzas = Gerencia::factory()->create(['nombre' => 'Gerencia de Finanzas']);
+    MemorandoDestino::factory()->create(['memorando_id' => $memo->id, 'gerencia_id' => $presupuesto->id, 'tipo' => TipoDestino::Para]);
+    MemorandoDestino::factory()->create(['memorando_id' => $memo->id, 'gerencia_id' => $finanzas->id, 'tipo' => TipoDestino::Copia]);
+
+    $this->actingAs($this->usuario)
+        ->get(route('memorandos.ver', $memo))
+        ->assertOk()
+        ->assertSeeInOrder(['Para', 'Gerencia de Presupuesto', 'Con copia a', 'Gerencia de Finanzas'])
+        ->assertDontSee('PARA')
+        ->assertDontSee('COPIA');
 });

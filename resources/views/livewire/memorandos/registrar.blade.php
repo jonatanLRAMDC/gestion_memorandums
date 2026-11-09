@@ -136,170 +136,17 @@ new #[Title('Registrar memorando')] class extends Component {
 
     <form wire:submit="guardar" class="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
         <div class="flex flex-col gap-6">
-            {{-- Número del memorando --}}
-            <section class="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-700 dark:bg-zinc-900">
-                <flux:heading>Número del memorando</flux:heading>
-                <div class="mt-4 grid grid-cols-[88px_12px_minmax(0,110px)_12px_minmax(0,130px)_12px_minmax(0,100px)] items-end gap-x-1 gap-y-1 text-sm">
-                    <flux:label>Institución</flux:label><span></span>
-                    <flux:label>Siglas</flux:label><span></span>
-                    <flux:label>Correlativo</flux:label><span></span>
-                    <flux:label>Año</flux:label>
-
-                    <flux:input value="AMDC" readonly disabled aria-label="Institución" />
-                    <span class="text-center text-zinc-400">-</span>
-                    <flux:input wire:model.live.blur="form.siglas" :readonly="$emitido" :disabled="$emitido" class="uppercase" placeholder="GRH" aria-label="Siglas" />
-                    <span class="text-center text-zinc-400">-</span>
-                    <flux:input wire:model.live.debounce.400ms="form.correlativo" inputmode="numeric" placeholder="398" aria-label="Correlativo" />
-                    <span class="text-center text-zinc-400">-</span>
-                    <flux:input wire:model.live.blur="form.anio" type="number" aria-label="Año" />
-                </div>
-                <div class="mt-2 space-y-1">
-                    <flux:error name="form.siglas" />
-                    <flux:error name="form.correlativo" />
-                    <flux:error name="form.anio" />
-                </div>
-                <p class="mt-3 text-sm text-zinc-500">
-                    Número completo: <span class="font-mono font-semibold text-zinc-800 dark:text-white">{{ $form->numeroCompleto() }}</span>
-                    @unless ($emitido)
-                        · las siglas se proponen desde el catálogo y puede corregirlas según el documento.
-                    @endunless
-                </p>
-            </section>
-
-            {{-- Remitente --}}
-            <section class="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-700 dark:bg-zinc-900">
-                <flux:heading>Remitente (DE)</flux:heading>
-                <div class="mt-4 grid gap-4 md:grid-cols-2">
-                    @if ($emitido)
-                        <div class="md:col-span-2">
-                            <flux:input label="Gerencia emisora" :value="$this->propia->nombre" readonly icon:trailing="lock-closed" />
-                            <p class="mt-1 text-xs text-zinc-500">Es su gerencia; no se puede cambiar.</p>
-                        </div>
-                    @else
-                        <div class="md:col-span-2">
-                        <flux:select wire:model.live="form.gerencia_remitente_id" label="Gerencia remitente">
-                            <flux:select.option value="">Seleccione la gerencia que envía el memo</flux:select.option>
-                            @foreach ($this->gerencias as $gerencia)
-                                <flux:select.option :value="$gerencia->id">{{ $gerencia->siglas ? $gerencia->siglas.' — ' : '' }}{{ $gerencia->nombre }}</flux:select.option>
-                            @endforeach
-                        </flux:select>
-                        </div>
-                    @endif
-                    <flux:input wire:model="form.remitente_nombre" label="Persona que firma" placeholder="Ing. Nombre Apellido" />
-                    <flux:input wire:model="form.remitente_cargo" label="Cargo" placeholder="Gerente" />
-                </div>
-            </section>
-
-            {{-- Destinatarios --}}
-            <section class="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-700 dark:bg-zinc-900">
-                <flux:heading>Destinatario{{ $emitido ? 's' : '' }} (PARA)</flux:heading>
-
-                @if ($emitido)
-                    <div class="mt-4 space-y-3">
-                        @foreach ($form->destinos as $indice => $destino)
-                            <div wire:key="destino-{{ $indice }}" class="grid gap-3 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_110px_auto] md:items-start">
-                                <div>
-                                    <flux:select wire:model.live="form.destinos.{{ $indice }}.gerencia_id" aria-label="Gerencia destinataria">
-                                        <flux:select.option value="">Gerencia destinataria</flux:select.option>
-                                        @foreach ($this->gerencias as $gerencia)
-                                            <flux:select.option :value="$gerencia->id">{{ $gerencia->siglas ? $gerencia->siglas.' — ' : '' }}{{ $gerencia->nombre }}</flux:select.option>
-                                        @endforeach
-                                    </flux:select>
-                                    <flux:error name="form.destinos.{{ $indice }}.gerencia_id" />
-                                </div>
-                                <flux:input wire:model="form.destinos.{{ $indice }}.persona_nombre" placeholder="Persona (opcional)" aria-label="Persona destinataria" />
-                                <flux:select wire:model="form.destinos.{{ $indice }}.tipo" aria-label="Tipo de destinatario">
-                                    <flux:select.option value="para">PARA</flux:select.option>
-                                    <flux:select.option value="copia">COPIA</flux:select.option>
-                                </flux:select>
-                                <flux:button variant="ghost" icon="trash" wire:click="quitarDestino({{ $indice }})" :disabled="count($form->destinos) === 1" aria-label="Quitar destinatario" />
-                            </div>
-                        @endforeach
-                        <flux:error name="form.destinos" />
-                        <flux:button size="sm" variant="ghost" icon="plus" wire:click="agregarDestino">Agregar destinatario o copia</flux:button>
-                    </div>
-                @else
-                    <div class="mt-4 grid gap-4 md:grid-cols-2">
-                        <div>
-                            <flux:input label="Gerencia receptora" :value="$this->propia->nombre" readonly icon:trailing="lock-closed" />
-                            <p class="mt-1 text-xs text-zinc-500">Es su gerencia; no se puede cambiar.</p>
-                        </div>
-                        <flux:input wire:model="form.persona_destinataria" label="Persona destinataria" placeholder="Opcional" />
-                    </div>
-                @endif
-            </section>
-
-            {{-- Contenido y fechas --}}
-            <section class="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-700 dark:bg-zinc-900">
-                <flux:heading>Datos del memo</flux:heading>
-                <div class="mt-4 grid gap-4 md:grid-cols-2">
-                    <div class="md:col-span-2">
-                        <flux:input wire:model="form.asunto" label="Asunto" placeholder="Organización de turnos y rotación de teletrabajo" />
-                    </div>
-                    <div>
-                        <flux:input wire:model.live="form.fecha_memo" type="date" label="Fecha del memo" :max="now()->toDateString()" />
-                        <p class="mt-1 min-h-5 text-sm text-zinc-500" data-fecha-en-letras>{{ MemorandoForm::fechaEnLetras($form->fecha_memo) }}</p>
-                    </div>
-                    <div>
-                        <flux:input wire:model.live="form.fecha_movimiento" type="date" :label="$emitido ? 'Fecha de envío' : 'Fecha de recepción'" :max="now()->toDateString()" />
-                        <p class="mt-1 min-h-5 text-sm text-zinc-500" data-fecha-en-letras>{{ MemorandoForm::fechaEnLetras($form->fecha_movimiento) }}</p>
-                    </div>
-                    <div class="md:col-span-2">
-                        <flux:textarea wire:model="form.observaciones" label="Observaciones" rows="2" placeholder="Opcional" />
-                    </div>
-                    <div class="md:col-span-2">
-                        <flux:input label="Fecha y hora de registro" value="Se asigna al guardar, con la hora del servidor" readonly disabled icon:trailing="lock-closed" />
-                    </div>
-                </div>
-            </section>
+            @include('partials.memorando-campos', ['gerencias' => $this->gerencias, 'propia' => $this->propia, 'edicion' => false])
         </div>
 
         {{-- PDF --}}
         <aside class="flex flex-col gap-4 xl:sticky xl:top-6 xl:self-start">
-            <section
-                class="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-700 dark:bg-zinc-900"
-                x-data="{
-                    vista: null,
-                    mostrar(evento) {
-                        if (evento.target.type !== 'file') return
-                        if (this.vista) URL.revokeObjectURL(this.vista)
-                        let archivo = evento.target.files[0]
-                        this.vista = archivo && archivo.type === 'application/pdf' ? URL.createObjectURL(archivo) : null
-                    },
-                }"
-                x-on:change="mostrar($event)"
-            >
-                <flux:heading>PDF escaneado</flux:heading>
-                <flux:subheading>Solo PDF, hasta {{ round(config('memorandos.pdf_max_kb') / 1024) }} MB.</flux:subheading>
-
-                <div class="mt-4">
-                    <flux:input type="file" wire:model="form.pdf" accept="application/pdf" aria-label="PDF escaneado" />
-                    <div wire:loading wire:target="form.pdf" class="mt-2 text-sm text-zinc-500">Cargando archivo…</div>
-                    <flux:error name="form.pdf" class="mt-2" />
-
-                    @if ($form->pdfDuplicadoEn)
-                        <flux:checkbox wire:model="form.confirmarPdfDuplicado" label="Registrar de todos modos" class="mt-3" />
-                    @endif
-                </div>
-
-                @if ($this->infoPdf)
-                    <dl class="mt-4 grid grid-cols-2 gap-2 text-sm">
-                        <dt class="text-zinc-500">Páginas</dt>
-                        <dd class="text-right font-medium">{{ $this->infoPdf['paginas'] ?? 'No determinado' }}</dd>
-                        <dt class="text-zinc-500">Tamaño</dt>
-                        <dd class="text-right font-medium">{{ $this->infoPdf['tamano'] }}</dd>
-                    </dl>
-                @endif
-
-                {{-- La vista previa se arma en el navegador con el archivo elegido; no se pide al servidor. --}}
-                <div wire:ignore class="mt-4">
-                    <iframe x-show="vista" x-cloak :src="vista" title="Vista previa del PDF" class="h-[520px] w-full rounded-lg border border-zinc-200 dark:border-zinc-700"></iframe>
-                    <div x-show="! vista" class="flex h-[300px] flex-col items-center justify-center rounded-lg border-2 border-dashed border-zinc-200 text-center text-sm text-zinc-500 dark:border-zinc-700">
-                        <flux:icon name="document-arrow-up" class="mb-2 size-8 text-zinc-400" />
-                        Aquí verá la vista previa del PDF
-                    </div>
-                </div>
-            </section>
+            @include('partials.pdf-carga', [
+                'titulo' => 'PDF escaneado',
+                'infoPdf' => $this->infoPdf,
+                'pdfDuplicadoEn' => $form->pdfDuplicadoEn,
+                'etiquetaConfirmar' => 'Registrar de todos modos',
+            ])
 
             <div class="flex justify-end gap-2">
                 <flux:button variant="ghost" :href="route('memorandos.index')" wire:navigate>Cancelar</flux:button>
