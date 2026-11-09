@@ -3,7 +3,6 @@
 use App\Models\Gerencia;
 use App\Models\Registro;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Title;
@@ -29,6 +28,12 @@ new #[Title('Memorandos')] class extends Component {
     #[Url(except: '')]
     public string $hasta = '';
 
+    #[Url(except: 'registrado')]
+    public string $orden = 'registrado';
+
+    #[Url(as: 'dir', except: 'desc')]
+    public string $direccion = 'desc';
+
     public function updated(string $propiedad): void
     {
         $this->resetPage();
@@ -41,11 +46,40 @@ new #[Title('Memorandos')] class extends Component {
     }
 
     /**
-     * Devuelve la fecha aaaa-mm-dd si es válida; si no, null para ignorar el filtro.
+     * Ordena por la columna elegida; un segundo clic invierte el sentido.
      */
-    protected function fechaValida(string $fecha): ?string
+    public function ordenarPor(string $columna): void
     {
-        return preg_match('/^\d{4}-\d{2}-\d{2}$/', $fecha) && strtotime($fecha) ? $fecha : null;
+        if (! array_key_exists($columna, Registro::ORDENES)) {
+            return;
+        }
+
+        if ($this->orden === $columna) {
+            $this->direccion = $this->direccion === 'desc' ? 'asc' : 'desc';
+        } else {
+            $this->orden = $columna;
+            $this->direccion = $columna === 'numero' ? 'asc' : 'desc';
+        }
+
+        $this->resetPage();
+    }
+
+    /**
+     * Filtros activos, en la forma que usan las exportaciones.
+     *
+     * @return array<string, string>
+     */
+    public function filtrosActuales(): array
+    {
+        return array_filter([
+            'tipo' => $this->tipo,
+            'q' => $this->buscar,
+            'gerencia' => $this->gerenciaId,
+            'desde' => $this->desde,
+            'hasta' => $this->hasta,
+            'orden' => $this->orden,
+            'dir' => $this->direccion,
+        ], fn (string $valor) => $valor !== '');
     }
 
     /**
@@ -69,20 +103,16 @@ new #[Title('Memorandos')] class extends Component {
     public function registros(): LengthAwarePaginator
     {
         return Registro::query()
-            ->where('gerencia_id', auth()->user()->gerencia_id)
+            ->deGerencia(auth()->user()->gerencia_id)
             ->with(['memorando.gerenciaEmisora:id,nombre,siglas', 'memorando.destinos.gerencia:id,nombre,siglas', 'memorando.archivoVigente:id,memorando_id'])
-            ->when($this->tipo !== '', fn (Builder $query) => $query->where('tipo', $this->tipo))
-            ->when($this->buscar !== '', fn (Builder $query) => $query->whereHas('memorando', fn (Builder $memo) => $memo
-                ->where('numero', 'like', '%'.trim($this->buscar).'%')
-                ->orWhere('asunto', 'like', '%'.trim($this->buscar).'%')
-                ->orWhere('remitente_nombre', 'like', '%'.trim($this->buscar).'%')))
-            ->when($this->gerenciaId !== '', fn (Builder $query) => $query->whereHas('memorando', fn (Builder $memo) => $memo
-                ->where('gerencia_emisora_id', $this->gerenciaId)
-                ->orWhereHas('destinos', fn (Builder $destino) => $destino->where('gerencia_id', $this->gerenciaId))))
-            ->when($this->fechaValida($this->desde), fn (Builder $query, string $desde) => $query->whereHas('memorando', fn (Builder $memo) => $memo->whereDate('fecha_memo', '>=', $desde)))
-            ->when($this->fechaValida($this->hasta), fn (Builder $query, string $hasta) => $query->whereHas('memorando', fn (Builder $memo) => $memo->whereDate('fecha_memo', '<=', $hasta)))
-            ->latest('fecha_movimiento')
-            ->latest('id')
+            ->filtrar([
+                'tipo' => $this->tipo,
+                'buscar' => $this->buscar,
+                'gerencia' => $this->gerenciaId,
+                'desde' => $this->desde,
+                'hasta' => $this->hasta,
+            ])
+            ->ordenar($this->orden, $this->direccion)
             ->paginate(15);
     }
 }; ?>
@@ -94,12 +124,21 @@ new #[Title('Memorandos')] class extends Component {
             <flux:subheading>Memorandos emitidos y recibidos por {{ auth()->user()->gerencia?->nombre }}.</flux:subheading>
         </div>
 
-        @can('memorandos.registrar')
-            <div class="flex gap-2">
+        <div class="flex flex-wrap gap-2">
+            @can('memorandos.exportar')
+                <flux:dropdown position="bottom" align="end">
+                    <flux:button icon="arrow-down-tray" icon:trailing="chevron-down">Exportar</flux:button>
+                    <flux:menu>
+                        <flux:menu.item icon="table-cells" :href="route('memorandos.exportar.excel', $this->filtrosActuales())">Excel (.xlsx)</flux:menu.item>
+                        <flux:menu.item icon="printer" :href="route('memorandos.exportar.imprimir', $this->filtrosActuales())" target="_blank">PDF o impresión</flux:menu.item>
+                    </flux:menu>
+                </flux:dropdown>
+            @endcan
+            @can('memorandos.registrar')
                 <flux:button icon="paper-airplane" :href="route('memorandos.registrar', 'emitido')" wire:navigate>Registrar emitido</flux:button>
                 <flux:button variant="primary" icon="inbox-arrow-down" :href="route('memorandos.registrar', 'recibido')" wire:navigate>Registrar recibido</flux:button>
-            </div>
-        @endcan
+            @endcan
+        </div>
     </div>
 
     <div class="inline-flex w-fit rounded-lg border border-zinc-200 bg-white p-1 dark:border-zinc-700 dark:bg-zinc-900">
@@ -125,12 +164,13 @@ new #[Title('Memorandos')] class extends Component {
     <div class="rounded-xl border border-zinc-200 bg-white px-4 dark:border-zinc-700 dark:bg-zinc-900">
         <flux:table :paginate="$this->registros">
             <flux:table.columns>
-                <flux:table.column>Número</flux:table.column>
-                <flux:table.column>Tipo</flux:table.column>
-                <flux:table.column>De / Para</flux:table.column>
-                <flux:table.column>Asunto</flux:table.column>
-                <flux:table.column>Fecha memo</flux:table.column>
-                <flux:table.column>Envío / recepción</flux:table.column>
+                @foreach (['numero' => 'Número', 'tipo' => 'Tipo', 'contraparte' => 'De / Para', 'asunto' => 'Asunto', 'fecha_memo' => 'Fecha memo', 'movimiento' => 'Envío / recepción', 'registrado' => 'Registrado'] as $columna => $titulo)
+                    @if (array_key_exists($columna, \App\Models\Registro::ORDENES))
+                        <flux:table.column sortable :sorted="$orden === $columna" :direction="$direccion" wire:click="ordenarPor('{{ $columna }}')" data-orden="{{ $columna }}">{{ $titulo }}</flux:table.column>
+                    @else
+                        <flux:table.column>{{ $titulo }}</flux:table.column>
+                    @endif
+                @endforeach
                 <flux:table.column align="end">Acciones</flux:table.column>
             </flux:table.columns>
 
@@ -153,6 +193,10 @@ new #[Title('Memorandos')] class extends Component {
                         <flux:table.cell class="max-w-72 truncate" title="{{ $memo->asunto }}">{{ $memo->asunto }}</flux:table.cell>
                         <flux:table.cell class="tabular-nums">{{ $memo->fechaMemoTexto() }}</flux:table.cell>
                         <flux:table.cell class="tabular-nums">{{ $registro->fecha_movimiento->format('d/m/Y') }}</flux:table.cell>
+                        <flux:table.cell class="text-sm tabular-nums text-zinc-500" title="Registrado el {{ $registro->created_at->format('d/m/Y H:i') }}">
+                            {{ $registro->created_at->format('d/m/Y') }}
+                            <span class="block text-xs">{{ $registro->created_at->format('H:i') }}</span>
+                        </flux:table.cell>
                         <flux:table.cell align="end">
                             <flux:button size="sm" variant="ghost" icon="eye" :href="route('memorandos.ver', $memo)" wire:navigate>Ver</flux:button>
                             @if ($memo->archivoVigente)
@@ -162,7 +206,7 @@ new #[Title('Memorandos')] class extends Component {
                     </flux:table.row>
                 @empty
                     <flux:table.row>
-                        <flux:table.cell colspan="7" class="py-10 text-center text-zinc-500">No hay memorandos con estos filtros.</flux:table.cell>
+                        <flux:table.cell colspan="8" class="py-10 text-center text-zinc-500">No hay memorandos con estos filtros.</flux:table.cell>
                     </flux:table.row>
                 @endforelse
             </flux:table.rows>

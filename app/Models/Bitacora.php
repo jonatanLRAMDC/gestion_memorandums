@@ -103,6 +103,10 @@ class Bitacora extends Model
         'rol_activado' => 'Rol activado',
         'rol_desactivado' => 'Rol desactivado',
         'memorando_registrado' => 'Memorando registrado',
+        'memorando_editado' => 'Memorando editado',
+        'pdf_reemplazado' => 'PDF reemplazado por una nueva versión',
+        'listado_exportado' => 'Listado exportado',
+        'reporte_exportado' => 'Reporte exportado',
         'documento_consultado' => 'PDF consultado',
         'documento_descargado' => 'PDF descargado',
     ];
@@ -120,6 +124,66 @@ class Bitacora extends Model
         'Registro' => 'Registro',
         'Archivo' => 'Archivo',
     ];
+
+    /**
+     * Nombres visibles de los campos que se guardan en "antes" y "después".
+     *
+     * @var array<string, string>
+     */
+    public const CAMPOS = [
+        'numero' => 'Número',
+        'gerencia_emisora' => 'Gerencia remitente',
+        'remitente_nombre' => 'Persona que firma',
+        'remitente_cargo' => 'Cargo',
+        'para' => 'Para',
+        'copia' => 'Con copia a',
+        'asunto' => 'Asunto',
+        'fecha_memo' => 'Fecha del memo',
+        'fecha_movimiento' => 'Fecha de envío o recepción',
+        'observaciones' => 'Observaciones',
+        'version' => 'Versión del PDF',
+        'motivo' => 'Motivo',
+        'archivo' => 'Archivo',
+        'archivo_id' => 'Id. del archivo',
+        'formato' => 'Formato',
+        'filtros' => 'Filtros',
+        'registros' => 'Registros',
+    ];
+
+    /**
+     * Nombre visible de un campo de "antes" o "después".
+     */
+    public static function etiquetaCampo(string $campo): string
+    {
+        return self::CAMPOS[$campo] ?? Str::ucfirst(str_replace('_', ' ', $campo));
+    }
+
+    /**
+     * Cambios de la entrada como filas campo / antes / después.
+     *
+     * @return list<array{campo: string, antes: string, despues: string}>
+     */
+    public function cambios(): array
+    {
+        $antes = $this->antes ?? [];
+        $despues = $this->despues ?? [];
+
+        return array_values(array_map(fn (string $campo) => [
+            'campo' => self::etiquetaCampo($campo),
+            'antes' => self::valorLegible($antes[$campo] ?? null),
+            'despues' => self::valorLegible($despues[$campo] ?? null),
+        ], array_unique([...array_keys($antes), ...array_keys($despues)])));
+    }
+
+    protected static function valorLegible(mixed $valor): string
+    {
+        return match (true) {
+            $valor === null, $valor === '' => '—',
+            is_bool($valor) => $valor ? 'Sí' : 'No',
+            is_array($valor) => collect($valor)->map(fn ($item, $clave) => is_string($clave) ? "{$clave}: ".self::valorLegible($item) : self::valorLegible($item))->join(', '),
+            default => (string) $valor,
+        };
+    }
 
     public function etiquetaEntidad(): ?string
     {

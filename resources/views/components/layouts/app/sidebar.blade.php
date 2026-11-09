@@ -41,6 +41,9 @@
                 @can('memorandos.consultar')
                     <flux:sidebar.item icon="document-text" :href="route('memorandos.index')" :current="request()->routeIs('memorandos.*')" wire:navigate>Memorandos</flux:sidebar.item>
                 @endcan
+                @can('reportes.consultar')
+                    <flux:sidebar.item icon="chart-bar" :href="route('reportes.index')" :current="request()->routeIs('reportes.*')" wire:navigate>Reportes</flux:sidebar.item>
+                @endcan
 
                 @canany(['gerencias.consultar', 'usuarios.consultar', 'roles.consultar', 'bitacora.consultar'])
                     <p class="px-3 pb-1 pt-4 text-xs font-medium text-white/50 in-data-flux-sidebar-collapsed-desktop:hidden">Administración</p>

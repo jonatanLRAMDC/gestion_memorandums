@@ -7,7 +7,12 @@ enum Permiso: string
     case MemorandosConsultar = 'memorandos.consultar';
     case MemorandosRegistrar = 'memorandos.registrar';
     case MemorandosEditar = 'memorandos.editar';
+    case MemorandosReemplazarPdf = 'memorandos.reemplazar_pdf';
     case MemorandosDescargar = 'memorandos.descargar';
+    case MemorandosExportar = 'memorandos.exportar';
+    case MemorandosHistorial = 'memorandos.historial';
+
+    case ReportesConsultar = 'reportes.consultar';
 
     case GerenciasConsultar = 'gerencias.consultar';
     case GerenciasCrear = 'gerencias.crear';
@@ -34,6 +39,7 @@ enum Permiso: string
     {
         return match (explode('.', $this->value)[0]) {
             'memorandos' => 'Memorandos',
+            'reportes' => 'Reportes',
             'gerencias' => 'Gerencias',
             'usuarios' => 'Usuarios',
             'roles' => 'Roles',
@@ -49,8 +55,12 @@ enum Permiso: string
         return match ($this) {
             self::MemorandosConsultar => 'Consultar memorandos y ver sus PDF',
             self::MemorandosRegistrar => 'Registrar memorandos emitidos y recibidos',
-            self::MemorandosEditar => 'Editar memorandos y reemplazar PDF',
+            self::MemorandosEditar => 'Editar los datos de los memorandos',
+            self::MemorandosReemplazarPdf => 'Reemplazar el PDF de los memorandos',
             self::MemorandosDescargar => 'Descargar los PDF',
+            self::MemorandosExportar => 'Exportar el listado a Excel y PDF',
+            self::MemorandosHistorial => 'Ver el historial de cambios y las versiones anteriores del PDF',
+            self::ReportesConsultar => 'Consultar y exportar los reportes',
             self::GerenciasConsultar => 'Consultar gerencias',
             self::GerenciasCrear => 'Crear gerencias',
             self::GerenciasEditar => 'Editar gerencias',
@@ -92,8 +102,16 @@ enum Permiso: string
     public static function porDefecto(string $slugRol): array
     {
         return match ($slugRol) {
-            'recepcion' => [self::MemorandosConsultar, self::MemorandosRegistrar, self::MemorandosEditar, self::MemorandosDescargar],
-            'consulta' => [self::MemorandosConsultar, self::MemorandosDescargar],
+            'recepcion' => [
+                self::MemorandosConsultar,
+                self::MemorandosRegistrar,
+                self::MemorandosEditar,
+                self::MemorandosReemplazarPdf,
+                self::MemorandosDescargar,
+                self::MemorandosExportar,
+                self::ReportesConsultar,
+            ],
+            'consulta' => [self::MemorandosConsultar, self::MemorandosDescargar, self::MemorandosExportar, self::ReportesConsultar],
             default => [],
         };
     }

@@ -8,6 +8,7 @@ use App\Models\Archivo;
 use App\Models\Bitacora;
 use App\Models\Gerencia;
 use App\Models\Memorando;
+use App\Models\Registro;
 use App\Rules\PdfValido;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Carbon;
@@ -72,6 +73,11 @@ class MemorandoForm extends Form
     public ?string $pdfDuplicadoEn = null;
 
     /**
+     * Memorando que se está editando. Solo vive durante la petición que guarda los cambios.
+     */
+    protected ?Memorando $enEdicion = null;
+
+    /**
      * Prepara el formulario según el tipo de registro y la gerencia del usuario.
      */
     public function iniciar(TipoRegistro $tipo, Gerencia $propia): void
@@ -87,6 +93,39 @@ class MemorandoForm extends Form
             $this->destinos = [$this->destinoVacio()];
         } else {
             $this->persona_destinataria = (string) $propia->titular_nombre;
+        }
+    }
+
+    /**
+     * Carga los datos de un memorando ya registrado para corregirlos.
+     */
+    public function cargar(Memorando $memorando, Registro $registro): void
+    {
+        $memorando->loadMissing('destinos');
+
+        $this->tipo = $registro->tipo->value;
+        $this->siglas = $memorando->siglas;
+        $this->correlativo = $memorando->correlativo;
+        $this->anio = $memorando->anio;
+        $this->remitente_nombre = (string) $memorando->remitente_nombre;
+        $this->remitente_cargo = (string) $memorando->remitente_cargo;
+        $this->asunto = $memorando->asunto;
+        $this->fecha_memo = $memorando->fecha_memo->toDateString();
+        $this->fecha_movimiento = $registro->fecha_movimiento->toDateString();
+        $this->observaciones = (string) $registro->observaciones;
+
+        if ($this->esEmitido()) {
+            $this->destinos = $memorando->destinos
+                ->map(fn ($destino) => [
+                    'gerencia_id' => $destino->gerencia_id,
+                    'persona_nombre' => (string) $destino->persona_nombre,
+                    'tipo' => $destino->tipo->value,
+                ])
+                ->values()
+                ->all();
+        } else {
+            $this->gerencia_remitente_id = $memorando->gerencia_emisora_id;
+            $this->persona_destinataria = (string) $memorando->destinos->firstWhere('gerencia_id', $registro->gerencia_id)?->persona_nombre;
         }
     }
 
@@ -132,7 +171,16 @@ class MemorandoForm extends Form
     protected function rules(): array
     {
         $propiaId = auth()->user()->gerencia_id;
-        $gerenciaActivaExterna = [Rule::exists('gerencias', 'id')->where('activa', true), Rule::notIn([$propiaId])];
+
+        // Al editar se aceptan también las gerencias que el memo ya tenía, aunque hoy estén inactivas.
+        $yaAsignadas = $this->enEdicion
+            ? [$this->enEdicion->gerencia_emisora_id, ...$this->enEdicion->destinos->pluck('gerencia_id')]
+            : [];
+
+        $gerenciaActivaExterna = [
+            Rule::exists('gerencias', 'id')->where(fn ($query) => $query->where('activa', true)->orWhereIn('id', $yaAsignadas)),
+            Rule::notIn([$propiaId]),
+        ];
 
         return [
             'tipo' => ['required', Rule::enum(TipoRegistro::class)],
@@ -151,8 +199,18 @@ class MemorandoForm extends Form
             'fecha_memo' => ['required', 'date_format:Y-m-d', 'before_or_equal:today'],
             'fecha_movimiento' => ['required', 'date_format:Y-m-d', 'after_or_equal:fecha_memo', 'before_or_equal:today'],
             'observaciones' => ['nullable', 'string', 'max:1000'],
-            'pdf' => ['required', 'file', 'mimetypes:application/pdf', 'max:'.config('memorandos.pdf_max_kb'), new PdfValido],
+            'pdf' => $this->enEdicion ? ['exclude'] : self::reglasPdf(),
         ];
+    }
+
+    /**
+     * Reglas del archivo PDF, compartidas con el reemplazo de versiones.
+     *
+     * @return list<mixed>
+     */
+    public static function reglasPdf(): array
+    {
+        return ['required', 'file', 'mimetypes:application/pdf', 'max:'.config('memorandos.pdf_max_kb'), new PdfValido];
     }
 
     /**
@@ -297,6 +355,118 @@ class MemorandoForm extends Form
     }
 
     /**
+     * Guarda las correcciones del memorando y de su registro. Anota en la bitácora solo los
+     * campos que cambiaron, con su valor anterior y el nuevo.
+     *
+     * @return list<string> Campos que cambiaron.
+     *
+     * @throws ValidationException
+     */
+    public function actualizar(Memorando $memorando, Registro $registro): array
+    {
+        $this->enEdicion = $memorando->load(['destinos.gerencia', 'gerenciaEmisora']);
+
+        if ($this->esEmitido()) {
+            $this->siglas = $memorando->siglas;
+        }
+
+        $this->siglas = mb_strtoupper(trim($this->siglas));
+        $this->correlativo = trim($this->correlativo);
+
+        $this->validate();
+
+        $correlativoValor = (int) $this->correlativo;
+        $numero = Memorando::armarNumero($this->siglas, $this->correlativo, (int) $this->anio);
+
+        $this->asegurarQueNoExiste($correlativoValor, $numero);
+
+        $antes = self::instantanea($memorando, $registro);
+
+        try {
+            DB::transaction(function () use ($memorando, $registro, $correlativoValor, $numero): void {
+                $memorando->update([
+                    'numero' => $numero,
+                    'siglas' => $this->siglas,
+                    'correlativo' => $this->correlativo,
+                    'correlativo_valor' => $correlativoValor,
+                    'anio' => $this->anio,
+                    'gerencia_emisora_id' => $this->esEmitido() ? $memorando->gerencia_emisora_id : $this->gerencia_remitente_id,
+                    'remitente_nombre' => $this->vacioANulo($this->remitente_nombre),
+                    'remitente_cargo' => $this->vacioANulo($this->remitente_cargo),
+                    'asunto' => trim($this->asunto),
+                    'fecha_memo' => $this->fecha_memo,
+                ]);
+
+                if ($this->esEmitido()) {
+                    $memorando->destinos()->delete();
+
+                    foreach ($this->destinos as $destino) {
+                        $memorando->destinos()->create([
+                            'gerencia_id' => $destino['gerencia_id'],
+                            'persona_nombre' => $this->vacioANulo($destino['persona_nombre']),
+                            'tipo' => $destino['tipo'],
+                        ]);
+                    }
+                } else {
+                    $memorando->destinos()
+                        ->where('gerencia_id', $registro->gerencia_id)
+                        ->update(['persona_nombre' => $this->vacioANulo($this->persona_destinataria)]);
+                }
+
+                $registro->update([
+                    'fecha_movimiento' => $this->fecha_movimiento,
+                    'observaciones' => $this->vacioANulo($this->observaciones),
+                ]);
+            });
+        } catch (UniqueConstraintViolationException) {
+            throw ValidationException::withMessages(['form.correlativo' => "El memorando {$numero} ya está registrado."]);
+        }
+
+        $despues = self::instantanea($memorando->refresh(), $registro->refresh());
+        $cambios = array_keys(array_diff_assoc(array_map('strval', $despues), array_map('strval', $antes)));
+
+        if ($cambios !== []) {
+            Bitacora::registrar(
+                'memorando_editado',
+                $memorando,
+                antes: array_intersect_key($antes, array_flip($cambios)),
+                despues: array_intersect_key($despues, array_flip($cambios)),
+            );
+        }
+
+        return $cambios;
+    }
+
+    /**
+     * Valores legibles del memorando y su registro, para comparar antes y después de editar.
+     *
+     * @return array<string, string|null>
+     */
+    public static function instantanea(Memorando $memorando, Registro $registro): array
+    {
+        $memorando->loadMissing(['gerenciaEmisora', 'destinos.gerencia']);
+
+        $destinos = fn (TipoDestino $tipo): ?string => $memorando->destinos
+            ->where('tipo', $tipo)
+            ->sortBy('id')
+            ->map(fn ($destino) => $destino->gerencia->nombre.($destino->persona_nombre ? " ({$destino->persona_nombre})" : ''))
+            ->join('; ') ?: null;
+
+        return [
+            'numero' => $memorando->numero,
+            'gerencia_emisora' => $memorando->gerenciaEmisora?->nombre,
+            'remitente_nombre' => $memorando->remitente_nombre,
+            'remitente_cargo' => $memorando->remitente_cargo,
+            'para' => $destinos(TipoDestino::Para),
+            'copia' => $destinos(TipoDestino::Copia),
+            'asunto' => $memorando->asunto,
+            'fecha_memo' => $memorando->fecha_memo->format('d/m/Y'),
+            'fecha_movimiento' => $registro->fecha_movimiento->format('d/m/Y'),
+            'observaciones' => $registro->observaciones,
+        ];
+    }
+
+    /**
      * @throws ValidationException
      */
     protected function asegurarQueNoExiste(int $correlativoValor, string $numero): void
@@ -305,6 +475,7 @@ class MemorandoForm extends Form
             ->where('siglas', $this->siglas)
             ->where('correlativo_valor', $correlativoValor)
             ->where('anio', $this->anio)
+            ->when($this->enEdicion, fn ($query, Memorando $memorando) => $query->whereKeyNot($memorando->id))
             ->value('numero');
 
         if ($existe) {

@@ -25,6 +25,8 @@ class Archivo extends Model
         'paginas',
         'version',
         'vigente',
+        'motivo',
+        'reemplazado_en',
         'subido_por',
     ];
 
@@ -38,6 +40,7 @@ class Archivo extends Model
             'paginas' => 'integer',
             'version' => 'integer',
             'vigente' => 'boolean',
+            'reemplazado_en' => 'datetime',
         ];
     }
 
